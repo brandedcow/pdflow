@@ -14,11 +14,14 @@ export default function LibraryScreen() {
   return (
     <View style={styles.container}>
       {books.length === 0 ? (
-        <Text style={styles.emptyText}>No PDFs yet. Tap + to import one.</Text>
+        <View style={styles.emptyContainer}>
+          <Text style={styles.emptyText}>No PDFs yet. Tap + to import one.</Text>
+        </View>
       ) : (
         <FlatList
           data={books}
           keyExtractor={(item) => item.id}
+          contentContainerStyle={{ paddingBottom: 80 }}
           renderItem={({ item }) => (
             <TouchableOpacity style={styles.bookItem} onPress={() => handleBookPress(item)}>
               <Text style={styles.bookTitle}>{item.filename}</Text>
@@ -42,13 +45,8 @@ export default function LibraryScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#fff' },
-  emptyText: {
-    flex: 1,
-    textAlign: 'center',
-    marginTop: 100,
-    fontSize: 16,
-    color: '#888',
-  },
+  emptyContainer: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+  emptyText: { fontSize: 16, color: '#888', textAlign: 'center', paddingHorizontal: 32 },
   bookItem: {
     paddingHorizontal: 16,
     paddingVertical: 12,
