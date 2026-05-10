@@ -42,3 +42,11 @@ yarn-error.*
 
 # Claude Code
 .claude/
+
+# Python
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+*.egg-info/
