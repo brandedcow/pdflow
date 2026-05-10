@@ -6,7 +6,11 @@ const STORAGE_KEY = 'pdflow_books';
 export async function loadBooks(): Promise<Book[]> {
   const raw = await AsyncStorage.getItem(STORAGE_KEY);
   if (!raw) return [];
-  return JSON.parse(raw) as Book[];
+  try {
+    return JSON.parse(raw) as Book[];
+  } catch {
+    return [];
+  }
 }
 
 export async function saveBook(book: Book): Promise<void> {

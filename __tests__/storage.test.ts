@@ -28,6 +28,12 @@ describe('loadBooks', () => {
     const books = await loadBooks();
     expect(books).toEqual([mockBook]);
   });
+
+  it('returns empty array when stored data is corrupt JSON', async () => {
+    await AsyncStorage.setItem('pdflow_books', 'not-valid-json{{{');
+    const books = await loadBooks();
+    expect(books).toEqual([]);
+  });
 });
 
 describe('saveBook', () => {
