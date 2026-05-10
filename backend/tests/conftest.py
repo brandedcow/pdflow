@@ -12,7 +12,9 @@ def client():
 
 @pytest.fixture
 def sample_pdf_bytes():
-    # Minimal valid single-page PDF
+    # Minimal PDF bytes used only for multipart upload testing.
+    # The xref offsets are approximate — this file is never parsed by a real
+    # PDF reader in tests because extract() is always mocked.
     return (
         b"%PDF-1.4\n"
         b"1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n"
