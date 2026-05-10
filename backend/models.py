@@ -27,6 +27,13 @@ class Block(BaseModel):
             raise ValueError("page must be >= 1")
         return v
 
+    @field_validator("confidence")
+    @classmethod
+    def confidence_must_be_valid(cls, v: float) -> float:
+        if not (0.0 <= v <= 1.0):
+            raise ValueError("confidence must be between 0.0 and 1.0")
+        return v
+
 
 class ExtractionResponse(BaseModel):
     book_id: str
@@ -34,3 +41,17 @@ class ExtractionResponse(BaseModel):
     overall_confidence: float
     page_count: int
     blocks: list[Block]
+
+    @field_validator("overall_confidence")
+    @classmethod
+    def overall_confidence_must_be_valid(cls, v: float) -> float:
+        if not (0.0 <= v <= 1.0):
+            raise ValueError("overall_confidence must be between 0.0 and 1.0")
+        return v
+
+    @field_validator("page_count")
+    @classmethod
+    def page_count_must_be_positive(cls, v: int) -> int:
+        if v < 1:
+            raise ValueError("page_count must be >= 1")
+        return v

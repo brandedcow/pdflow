@@ -47,3 +47,55 @@ def test_extraction_response_serialises_to_dict():
     data = response.model_dump()
     assert data["status"] == "failed"
     assert data["blocks"] == []
+
+
+def test_block_rejects_confidence_above_1():
+    from models import Block, BlockType
+    with pytest.raises(ValidationError):
+        Block(type=BlockType.text, content="Hello", page=1, confidence=1.5)
+
+
+def test_block_rejects_negative_confidence():
+    from models import Block, BlockType
+    with pytest.raises(ValidationError):
+        Block(type=BlockType.text, content="Hello", page=1, confidence=-0.1)
+
+
+def test_extraction_response_rejects_invalid_overall_confidence():
+    from models import ExtractionResponse, ExtractionStatus
+    with pytest.raises(ValidationError):
+        ExtractionResponse(
+            book_id="abc-123",
+            status=ExtractionStatus.success,
+            overall_confidence=1.5,
+            page_count=1,
+            blocks=[],
+        )
+
+
+def test_extraction_response_rejects_zero_page_count():
+    from models import ExtractionResponse, ExtractionStatus
+    with pytest.raises(ValidationError):
+        ExtractionResponse(
+            book_id="abc-123",
+            status=ExtractionStatus.success,
+            overall_confidence=0.9,
+            page_count=0,
+            blocks=[],
+        )
+
+
+def test_extraction_response_serialises_enums_to_strings():
+    import json
+    from models import ExtractionResponse, ExtractionStatus, Block, BlockType
+    block = Block(type=BlockType.text, content="Hello", page=1, confidence=0.9)
+    response = ExtractionResponse(
+        book_id="abc-123",
+        status=ExtractionStatus.success,
+        overall_confidence=0.9,
+        page_count=1,
+        blocks=[block],
+    )
+    parsed = json.loads(response.model_dump_json())
+    assert parsed["status"] == "success"
+    assert parsed["blocks"][0]["type"] == "text"
