@@ -1,9 +1,11 @@
+from typing import Any
+
 from marker.convert import convert_single_pdf
 from marker.models import load_all_models as create_model_dict
 from models import Block, BlockType
 
 # Loaded once at module level to avoid reloading on every request
-_model_list: list | None = None
+_model_list: list[Any] | None = None
 
 
 def _get_models() -> list:
@@ -14,16 +16,25 @@ def _get_models() -> list:
 
 
 def extract(file_path: str) -> tuple[list[Block], int]:
-    """Run Marker on a PDF file and return parsed blocks + page count."""
-    model_list = _get_models()
-    full_text, _images, out_meta = convert_single_pdf(file_path, model_list)
+    """Run Marker on a PDF file and return parsed blocks + page count.
+
+    Thread-safety note: _get_models() uses a simple global singleton.
+    This will be replaced with a FastAPI lifespan startup event in main.py
+    to ensure models are loaded once before any requests are served.
+    """
+    model_dict = _get_models()
+    full_text, _images, out_meta = convert_single_pdf(file_path, model_dict)
     page_count = out_meta.get("page_count", 1)
-    blocks = _parse_markdown(full_text, page_count)
+    blocks = _parse_markdown(full_text)
     return blocks, page_count
 
 
-def _parse_markdown(markdown: str, page_count: int) -> list[Block]:
-    """Parse Marker's Markdown output into typed Block list."""
+def _parse_markdown(markdown: str) -> list[Block]:
+    """Parse Marker's Markdown output into typed Block list.
+
+    Note: page attribution is not available from Marker's plain Markdown output.
+    All blocks are assigned page=1. This is a known v1 limitation.
+    """
     blocks: list[Block] = []
     lines = markdown.split("\n")
     i = 0

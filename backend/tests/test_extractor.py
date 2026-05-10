@@ -1,5 +1,10 @@
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch
 from models import BlockType
+
+
+def teardown_function():
+    import extractor
+    extractor._model_list = None
 
 SAMPLE_MARKDOWN = """\
 # Introduction
@@ -82,4 +87,12 @@ def test_extract_empty_pdf_returns_empty_blocks():
         blocks, page_count = extract("/fake/path.pdf")
 
     assert blocks == []
+    assert page_count == 1
+
+
+def test_extract_uses_default_page_count_when_metadata_missing():
+    with patch("extractor.convert_single_pdf", return_value=("# Title", {}, {})), \
+         patch("extractor.create_model_dict", return_value={}):
+        from extractor import extract
+        _, page_count = extract("/fake/path.pdf")
     assert page_count == 1
