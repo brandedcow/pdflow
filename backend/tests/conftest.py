@@ -6,10 +6,11 @@ from fastapi.testclient import TestClient
 @pytest.fixture
 def client():
     import sys
+    sys.modules.pop("main", None)
     with patch.dict("os.environ", {"GROQ_API_KEY": "test-key"}):
-        sys.modules.pop("main", None)
         from main import app
-        return TestClient(app)
+        yield TestClient(app)
+    sys.modules.pop("main", None)
 
 
 @pytest.fixture
