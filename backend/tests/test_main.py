@@ -82,3 +82,47 @@ def test_openapi_schema_is_reachable(client):
     response = client.get("/openapi.json")
     assert response.status_code == 200
     assert "paths" in response.json()
+
+
+def test_extract_status_boundary_exactly_0_8_is_success(client, sample_pdf_bytes):
+    with patch("main.extract") as mock_extract, patch("main.verify") as mock_verify:
+        mock_extract.return_value = ([make_scored_block(0.0)], 1)
+        mock_verify.return_value = [make_scored_block(0.8)]
+        response = client.post(
+            "/extract",
+            files={"pdf_file": ("test.pdf", sample_pdf_bytes, "application/pdf")},
+        )
+    assert response.json()["status"] == ExtractionStatus.success.value
+
+
+def test_extract_status_boundary_exactly_0_5_is_partial(client, sample_pdf_bytes):
+    with patch("main.extract") as mock_extract, patch("main.verify") as mock_verify:
+        mock_extract.return_value = ([make_scored_block(0.0)], 1)
+        mock_verify.return_value = [make_scored_block(0.5)]
+        response = client.post(
+            "/extract",
+            files={"pdf_file": ("test.pdf", sample_pdf_bytes, "application/pdf")},
+        )
+    assert response.json()["status"] == ExtractionStatus.partial.value
+
+
+def test_extract_status_boundary_below_0_5_is_failed(client, sample_pdf_bytes):
+    with patch("main.extract") as mock_extract, patch("main.verify") as mock_verify:
+        mock_extract.return_value = ([make_scored_block(0.0)], 1)
+        mock_verify.return_value = [make_scored_block(0.499)]
+        response = client.post(
+            "/extract",
+            files={"pdf_file": ("test.pdf", sample_pdf_bytes, "application/pdf")},
+        )
+    assert response.json()["status"] == ExtractionStatus.failed.value
+
+
+def test_extract_returns_failed_when_extraction_raises(client, sample_pdf_bytes):
+    with patch("main.extract") as mock_extract:
+        mock_extract.side_effect = Exception("Marker crashed")
+        response = client.post(
+            "/extract",
+            files={"pdf_file": ("test.pdf", sample_pdf_bytes, "application/pdf")},
+        )
+    assert response.status_code == 200
+    assert response.json()["status"] == ExtractionStatus.failed.value

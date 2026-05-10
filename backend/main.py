@@ -1,9 +1,12 @@
+import logging
 import os
 import uuid
 import tempfile
 from pathlib import Path
 from dotenv import load_dotenv
 from fastapi import FastAPI, UploadFile, File
+
+logger = logging.getLogger(__name__)
 
 load_dotenv(Path(__file__).parent.parent / ".env.local")
 
@@ -30,7 +33,17 @@ async def extract_pdf(pdf_file: UploadFile = File(...)) -> ExtractionResponse:
         tmp_path = tmp.name
 
     try:
-        blocks, page_count = extract(tmp_path)
+        try:
+            blocks, page_count = extract(tmp_path)
+        except Exception as e:
+            logger.warning("Extraction failed for %s: %s", book_id, e, exc_info=True)
+            return ExtractionResponse(
+                book_id=book_id,
+                status=ExtractionStatus.failed,
+                overall_confidence=0.0,
+                page_count=1,
+                blocks=[],
+            )
 
         if not blocks:
             return ExtractionResponse(

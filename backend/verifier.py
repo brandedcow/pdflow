@@ -1,10 +1,13 @@
 import json
+import logging
 import os
 from groq import Groq
 from models import Block
 
 BATCH_SIZE = 20
 GROQ_MODEL = "llama-3.3-70b-versatile"
+
+logger = logging.getLogger(__name__)
 
 
 def verify(blocks: list[Block]) -> list[Block]:
@@ -23,7 +26,8 @@ def verify(blocks: list[Block]) -> list[Block]:
                 updated = result[i + j].model_copy(update={"confidence": score})
                 # Validate by reconstructing to ensure field validators run
                 result[i + j] = Block(**updated.model_dump())
-        except Exception:
+        except Exception as e:
+            logger.warning("Groq scoring failed for batch %d-%d: %s", i, i + len(batch), e, exc_info=True)
             for j in range(len(batch)):
                 updated = result[i + j].model_copy(update={"confidence": 0.5})
                 # Validate by reconstructing to ensure field validators run

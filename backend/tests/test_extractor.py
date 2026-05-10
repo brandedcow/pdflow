@@ -3,8 +3,10 @@ from models import BlockType
 
 
 def teardown_function():
-    import extractor
-    extractor._model_list = None
+    import sys
+    mod = sys.modules.get("extractor")
+    if mod is not None:
+        mod._model_list = None
 
 SAMPLE_MARKDOWN = """\
 # Introduction
