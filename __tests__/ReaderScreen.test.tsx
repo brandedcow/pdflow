@@ -2,21 +2,19 @@ import React from 'react';
 import { render, fireEvent, act } from '@testing-library/react-native';
 import ReaderScreen from '../app/reader';
 
-const mockBack = jest.fn();
-
 jest.mock('expo-router', () => ({
   useLocalSearchParams: () => ({ uri: '/documents/pdfs/test.pdf' }),
   router: { back: jest.fn() },
 }));
 
-let capturedOnError: (() => void) | null = null;
+let capturedOnError: ((error: object) => void) | null = null;
 
 jest.mock('react-native-pdf', () => {
   const React = require('react');
   const { View } = require('react-native');
   return {
     __esModule: true,
-    default: ({ onError, style }: { onError: () => void; style: object }) => {
+    default: ({ onError, style }: { onError: (error: object) => void; style: object }) => {
       capturedOnError = onError;
       return React.createElement(View, { testID: 'pdf-viewer', style });
     },
@@ -52,7 +50,7 @@ describe('ReaderScreen', () => {
   it('shows an error message when the PDF fails to load', async () => {
     const { getByText } = render(<ReaderScreen />);
     await act(async () => {
-      capturedOnError?.();
+      capturedOnError?.({}as any);
     });
     expect(getByText('Could not open this PDF.')).toBeTruthy();
     expect(getByText('Go back')).toBeTruthy();
@@ -61,7 +59,7 @@ describe('ReaderScreen', () => {
   it('navigates back from the error state', async () => {
     const { getByText } = render(<ReaderScreen />);
     await act(async () => {
-      capturedOnError?.();
+      capturedOnError?.({}as any);
     });
     fireEvent.press(getByText('Go back'));
     expect(routerBack).toHaveBeenCalledTimes(1);
