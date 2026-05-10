@@ -72,8 +72,12 @@ describe('LibraryContext', () => {
     expect(result.current.books[0]).toMatchObject({
       id: 'mock-uuid',
       filename: 'test.pdf',
-      path: '/mock/documents/pdfs/test.pdf',
+      path: '/mock/documents/pdfs/mock-uuid-test.pdf',
     });
+    expect(FileSystem.makeDirectoryAsync).toHaveBeenCalledWith(
+      '/mock/documents/pdfs/',
+      { intermediates: true }
+    );
   });
 
   it('importBook shows an alert and does not add a book when copy fails', async () => {
@@ -89,5 +93,8 @@ describe('LibraryContext', () => {
     });
     expect(alertSpy).toHaveBeenCalledWith('Import failed', "Couldn't import file");
     expect(result.current.books).toHaveLength(0);
+    // saveBook should not have been called — no orphaned AsyncStorage records
+    const stored = await AsyncStorage.getItem('pdflow_books');
+    expect(stored).toBeNull();
   });
 });

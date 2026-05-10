@@ -29,15 +29,16 @@ export function LibraryProvider({ children }: { children: React.ReactNode }) {
     if (result.canceled) return;
 
     const asset = result.assets[0];
+    const id = Crypto.randomUUID();
     const destDir = `${FileSystem.documentDirectory}pdfs/`;
-    const destPath = `${destDir}${asset.name}`;
+    const destPath = `${destDir}${id}-${asset.name}`;
 
     try {
       await FileSystem.makeDirectoryAsync(destDir, { intermediates: true });
       await FileSystem.copyAsync({ from: asset.uri, to: destPath });
 
       const book: Book = {
-        id: Crypto.randomUUID(),
+        id,
         filename: asset.name,
         path: destPath,
         addedAt: new Date().toISOString(),
