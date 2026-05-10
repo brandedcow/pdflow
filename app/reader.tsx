@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useLocalSearchParams, router } from 'expo-router';
 import Pdf from 'react-native-pdf';
@@ -6,6 +6,10 @@ import Pdf from 'react-native-pdf';
 export default function ReaderScreen() {
   const { uri } = useLocalSearchParams<{ uri: string }>();
   const [hasError, setHasError] = useState(false);
+
+  useEffect(() => {
+    if (!uri) setHasError(true);
+  }, [uri]);
 
   if (hasError) {
     return (
