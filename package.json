@@ -1,7 +1,7 @@
 {
   "name": "pdflow",
   "version": "1.0.0",
-  "main": "index.ts",
+  "main": "expo-router/entry",
   "scripts": {
     "start": "expo start",
     "android": "expo start --android",
@@ -9,12 +9,24 @@
     "web": "expo start --web"
   },
   "dependencies": {
+    "@react-native-async-storage/async-storage": "2.2.0",
     "expo": "~54.0.33",
+    "expo-constants": "~18.0.13",
+    "expo-crypto": "~15.0.9",
+    "expo-document-picker": "~14.0.8",
+    "expo-file-system": "~19.0.22",
+    "expo-linking": "~8.0.12",
+    "expo-router": "~6.0.23",
     "expo-status-bar": "~3.0.9",
     "react": "19.1.0",
-    "react-native": "0.81.5"
+    "react-native": "0.81.5",
+    "react-native-blob-util": "^0.24.7",
+    "react-native-pdf": "^7.0.4",
+    "react-native-safe-area-context": "~5.6.0",
+    "react-native-screens": "~4.16.0"
   },
   "devDependencies": {
+    "@testing-library/react-native": "^13.3.3",
     "@types/react": "~19.1.0",
     "eslint": "^9.39.4",
     "eslint-config-expo": "~10.0.0",
