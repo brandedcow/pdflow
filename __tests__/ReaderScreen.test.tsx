@@ -7,6 +7,10 @@ jest.mock('expo-router', () => ({
   router: { back: jest.fn() },
 }));
 
+jest.mock('react-native-safe-area-context', () => ({
+  useSafeAreaInsets: () => ({ top: 44, bottom: 34, left: 0, right: 0 }),
+}));
+
 let capturedOnError: ((error: object) => void) | null = null;
 
 jest.mock('react-native-pdf', () => {

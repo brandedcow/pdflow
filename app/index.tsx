@@ -1,5 +1,6 @@
 import React from 'react';
 import { FlatList, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { useLibrary } from '../src/hooks/useLibrary';
 import { Book } from '../src/types';
@@ -12,7 +13,7 @@ export default function LibraryScreen() {
   }
 
   return (
-    <View style={styles.container}>
+    <SafeAreaView style={styles.container}>
       {books.length === 0 ? (
         <View style={styles.emptyContainer}>
           <Text style={styles.emptyText}>No PDFs yet. Tap + to import one.</Text>
@@ -33,7 +34,7 @@ export default function LibraryScreen() {
       <TouchableOpacity style={styles.fab} onPress={importBook} accessibilityLabel="Import PDF">
         <Text style={styles.fabText}>+</Text>
       </TouchableOpacity>
-    </View>
+    </SafeAreaView>
   );
 }
 

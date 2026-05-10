@@ -1,11 +1,13 @@
 import React, { useEffect, useState } from 'react';
 import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useLocalSearchParams, router } from 'expo-router';
 import Pdf from 'react-native-pdf';
 
 export default function ReaderScreen() {
   const { uri } = useLocalSearchParams<{ uri: string }>();
   const [hasError, setHasError] = useState(false);
+  const insets = useSafeAreaInsets();
 
   useEffect(() => {
     if (!uri) setHasError(true);
@@ -24,7 +26,7 @@ export default function ReaderScreen() {
 
   return (
     <View style={styles.container}>
-      <View style={styles.header}>
+      <View style={[styles.header, { paddingTop: insets.top + 12 }]}>
         <TouchableOpacity onPress={() => router.back()}>
           <Text style={styles.backButton}>← Back</Text>
         </TouchableOpacity>
@@ -43,7 +45,6 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#fff' },
   header: {
     paddingHorizontal: 16,
-    paddingTop: 48,
     paddingBottom: 12,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: '#eee',
