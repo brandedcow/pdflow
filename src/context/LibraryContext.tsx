@@ -52,8 +52,6 @@ export function LibraryProvider({ children }: { children: React.ReactNode }) {
   }
 
   return (
-    <LibraryContext.Provider value={{ books, importBook }}>
-      {children}
-    </LibraryContext.Provider>
+    <LibraryContext.Provider value={{ books, importBook }}>{children}</LibraryContext.Provider>
   );
 }

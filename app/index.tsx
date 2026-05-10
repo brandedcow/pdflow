@@ -25,18 +25,12 @@ export default function LibraryScreen() {
           renderItem={({ item }) => (
             <TouchableOpacity style={styles.bookItem} onPress={() => handleBookPress(item)}>
               <Text style={styles.bookTitle}>{item.filename}</Text>
-              <Text style={styles.bookDate}>
-                {new Date(item.addedAt).toLocaleDateString()}
-              </Text>
+              <Text style={styles.bookDate}>{new Date(item.addedAt).toLocaleDateString()}</Text>
             </TouchableOpacity>
           )}
         />
       )}
-      <TouchableOpacity
-        style={styles.fab}
-        onPress={importBook}
-        accessibilityLabel="Import PDF"
-      >
+      <TouchableOpacity style={styles.fab} onPress={importBook} accessibilityLabel="Import PDF">
         <Text style={styles.fabText}>+</Text>
       </TouchableOpacity>
     </View>
