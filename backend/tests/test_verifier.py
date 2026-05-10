@@ -1,4 +1,5 @@
 import json
+import os
 from unittest.mock import patch, MagicMock
 from models import Block, BlockType
 
@@ -17,9 +18,10 @@ def test_verify_attaches_confidence_scores():
     from verifier import verify
     blocks = [make_block("Block one"), make_block("Block two")]
 
-    with patch("verifier.Groq") as MockGroq:
-        MockGroq.return_value.chat.completions.create.return_value = mock_groq_response([0.92, 0.78])
-        result = verify(blocks)
+    with patch.dict("os.environ", {"GROQ_API_KEY": "test-key"}):
+        with patch("verifier.Groq") as MockGroq:
+            MockGroq.return_value.chat.completions.create.return_value = mock_groq_response([0.92, 0.78])
+            result = verify(blocks)
 
     assert result[0].confidence == 0.92
     assert result[1].confidence == 0.78
@@ -29,9 +31,10 @@ def test_verify_defaults_to_0_5_when_groq_raises():
     from verifier import verify
     blocks = [make_block("Some text")]
 
-    with patch("verifier.Groq") as MockGroq:
-        MockGroq.return_value.chat.completions.create.side_effect = Exception("API error")
-        result = verify(blocks)
+    with patch.dict("os.environ", {"GROQ_API_KEY": "test-key"}):
+        with patch("verifier.Groq") as MockGroq:
+            MockGroq.return_value.chat.completions.create.side_effect = Exception("API error")
+            result = verify(blocks)
 
     assert result[0].confidence == 0.5
 
@@ -40,9 +43,10 @@ def test_verify_clamps_scores_above_1():
     from verifier import verify
     blocks = [make_block("Some text")]
 
-    with patch("verifier.Groq") as MockGroq:
-        MockGroq.return_value.chat.completions.create.return_value = mock_groq_response([1.5])
-        result = verify(blocks)
+    with patch.dict("os.environ", {"GROQ_API_KEY": "test-key"}):
+        with patch("verifier.Groq") as MockGroq:
+            MockGroq.return_value.chat.completions.create.return_value = mock_groq_response([1.5])
+            result = verify(blocks)
 
     assert result[0].confidence == 1.0
 
@@ -51,9 +55,10 @@ def test_verify_clamps_scores_below_0():
     from verifier import verify
     blocks = [make_block("Some text")]
 
-    with patch("verifier.Groq") as MockGroq:
-        MockGroq.return_value.chat.completions.create.return_value = mock_groq_response([-0.2])
-        result = verify(blocks)
+    with patch.dict("os.environ", {"GROQ_API_KEY": "test-key"}):
+        with patch("verifier.Groq") as MockGroq:
+            MockGroq.return_value.chat.completions.create.return_value = mock_groq_response([-0.2])
+            result = verify(blocks)
 
     assert result[0].confidence == 0.0
 
@@ -72,9 +77,10 @@ def test_verify_processes_multiple_batches():
         n = 20 if call_count == 1 else 5
         return mock_groq_response([0.9] * n)
 
-    with patch("verifier.Groq") as MockGroq:
-        MockGroq.return_value.chat.completions.create.side_effect = side_effect
-        result = verify(blocks)
+    with patch.dict("os.environ", {"GROQ_API_KEY": "test-key"}):
+        with patch("verifier.Groq") as MockGroq:
+            MockGroq.return_value.chat.completions.create.side_effect = side_effect
+            result = verify(blocks)
 
     assert call_count == 2
     assert len(result) == 25
@@ -94,9 +100,10 @@ def test_verify_second_batch_fallback_does_not_affect_first():
             return mock_groq_response([0.95] * 20)
         raise Exception("Second batch failed")
 
-    with patch("verifier.Groq") as MockGroq:
-        MockGroq.return_value.chat.completions.create.side_effect = side_effect
-        result = verify(blocks)
+    with patch.dict("os.environ", {"GROQ_API_KEY": "test-key"}):
+        with patch("verifier.Groq") as MockGroq:
+            MockGroq.return_value.chat.completions.create.side_effect = side_effect
+            result = verify(blocks)
 
     assert all(b.confidence == 0.95 for b in result[:20])
     assert all(b.confidence == 0.5 for b in result[20:])
