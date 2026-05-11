@@ -2,6 +2,7 @@ import React, { createContext, useEffect, useState } from 'react';
 import { Alert } from 'react-native';
 import * as DocumentPicker from 'expo-document-picker';
 import * as FileSystem from 'expo-file-system/legacy';
+import { File as FSFile } from 'expo-file-system';
 import * as Crypto from 'expo-crypto';
 import { Book, ExtractionStatus } from '../types';
 import { loadBooks, saveBook, replaceBook, deleteBook as storageDeleteBook } from '../storage/storage';
@@ -31,6 +32,12 @@ export function LibraryProvider({ children }: { children: React.ReactNode }) {
     if (result.canceled) return;
 
     const asset = result.assets[0];
+    const isDuplicate = books.some((b) => b.filename === asset.name);
+    if (isDuplicate) {
+      Alert.alert('Already in library', `"${asset.name}" is already in your library.`);
+      return;
+    }
+
     const pendingId = Crypto.randomUUID();
     const destDir = `${FileSystem.documentDirectory}pdfs/`;
     const pendingPath = `${destDir}${pendingId}-${asset.name}`;
@@ -59,7 +66,7 @@ export function LibraryProvider({ children }: { children: React.ReactNode }) {
       const bookId = extractionResult.book_id;
       const finalPath = `${destDir}${bookId}-${asset.name}`;
 
-      await FileSystem.moveAsync({ from: pendingPath, to: finalPath });
+      new FSFile(pendingPath).move(new FSFile(finalPath));
 
       const extractionStatus: ExtractionStatus =
         extractionResult.status === 'failed' ? 'failed' : 'ready';
@@ -85,8 +92,12 @@ export function LibraryProvider({ children }: { children: React.ReactNode }) {
     const book = books.find((b) => b.id === id);
     if (!book) return;
     try {
-      await FileSystem.deleteAsync(book.path, { idempotent: true });
-    } catch {
+      const file = new FSFile(book.path);
+      if (file.exists) {
+        file.delete();
+      }
+    } catch (e) {
+      console.error('[deleteBook] file delete failed for path:', book.path, e);
       Alert.alert('Delete failed', "Couldn't delete the book");
       return;
     }

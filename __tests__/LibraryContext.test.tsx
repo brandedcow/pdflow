@@ -3,6 +3,7 @@ import { renderHook, act } from '@testing-library/react-native';
 import { Alert } from 'react-native';
 import * as DocumentPicker from 'expo-document-picker';
 import * as FileSystem from 'expo-file-system/legacy';
+import { File as FSFile } from 'expo-file-system';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { LibraryProvider } from '../src/context/LibraryContext';
 import { useLibrary } from '../src/hooks/useLibrary';
@@ -17,8 +18,9 @@ jest.mock('expo-file-system/legacy', () => ({
   documentDirectory: '/mock/documents/',
   copyAsync: jest.fn().mockResolvedValue(undefined),
   makeDirectoryAsync: jest.fn().mockResolvedValue(undefined),
-  moveAsync: jest.fn().mockResolvedValue(undefined),
-  deleteAsync: jest.fn().mockResolvedValue(undefined),
+}));
+jest.mock('expo-file-system', () => ({
+  File: jest.fn(),
 }));
 jest.mock('expo-crypto', () => ({
   randomUUID: jest.fn().mockReturnValue('mock-pending-uuid'),
@@ -37,10 +39,14 @@ const wrapper = ({ children }: { children: React.ReactNode }) => (
   <LibraryProvider>{children}</LibraryProvider>
 );
 
+let mockFileInstance: { exists: boolean; delete: jest.Mock; move: jest.Mock };
+
 describe('LibraryContext', () => {
   beforeEach(async () => {
     await AsyncStorage.clear();
     jest.clearAllMocks();
+    mockFileInstance = { exists: true, delete: jest.fn(), move: jest.fn() };
+    (FSFile as jest.Mock).mockImplementation(() => mockFileInstance);
   });
 
   it('starts with an empty book list', async () => {
@@ -140,11 +146,38 @@ describe('LibraryContext', () => {
     expect(result.current.books).toHaveLength(0);
   });
 
-  describe('deleteBook', () => {
-    beforeEach(() => {
-      (FileSystem.deleteAsync as jest.Mock).mockResolvedValue(undefined);
+  it('importBook shows alert and does not import when filename already exists', async () => {
+    const alertSpy = jest.spyOn(Alert, 'alert');
+    const existingBook = {
+      id: 'existing-id',
+      filename: 'test.pdf',
+      path: '/mock/documents/pdfs/existing-id-test.pdf',
+      addedAt: '2026-05-11T00:00:00.000Z',
+      extractionStatus: 'ready' as const,
+    };
+    await AsyncStorage.setItem('pdflow_books', JSON.stringify([existingBook]));
+
+    (DocumentPicker.getDocumentAsync as jest.Mock).mockResolvedValue({
+      canceled: false,
+      assets: [{ uri: '/tmp/test.pdf', name: 'test.pdf' }],
     });
 
+    const { result } = renderHook(() => useLibrary(), { wrapper });
+    await act(async () => {});
+
+    await act(async () => {
+      await result.current.importBook();
+    });
+
+    expect(alertSpy).toHaveBeenCalledWith(
+      'Already in library',
+      '"test.pdf" is already in your library.'
+    );
+    expect(FileSystem.copyAsync).not.toHaveBeenCalled();
+    expect(result.current.books).toHaveLength(1);
+  });
+
+  describe('deleteBook', () => {
     const storedBook = {
       id: 'stored-id',
       filename: 'stored.pdf',
@@ -163,17 +196,15 @@ describe('LibraryContext', () => {
       });
 
       expect(result.current.books).toHaveLength(0);
-      expect(FileSystem.deleteAsync).toHaveBeenCalledWith(
-        '/mock/documents/pdfs/stored.pdf',
-        { idempotent: true }
-      );
+      expect(FSFile).toHaveBeenCalledWith('/mock/documents/pdfs/stored.pdf');
+      expect(mockFileInstance.delete).toHaveBeenCalled();
       const raw = await AsyncStorage.getItem('pdflow_books');
       expect(JSON.parse(raw!)).toHaveLength(0);
     });
 
     it('shows alert and does not remove book if filesystem delete throws', async () => {
       const alertSpy = jest.spyOn(Alert, 'alert');
-      (FileSystem.deleteAsync as jest.Mock).mockRejectedValue(new Error('Permission denied'));
+      mockFileInstance.delete.mockImplementation(() => { throw new Error('not writable'); });
       await AsyncStorage.setItem('pdflow_books', JSON.stringify([storedBook]));
 
       const { result } = renderHook(() => useLibrary(), { wrapper });
@@ -195,7 +226,7 @@ describe('LibraryContext', () => {
         await result.current.deleteBook('non-existent-id');
       });
 
-      expect(FileSystem.deleteAsync).not.toHaveBeenCalled();
+      expect(mockFileInstance.delete).not.toHaveBeenCalled();
       expect(result.current.books).toHaveLength(0);
     });
   });
