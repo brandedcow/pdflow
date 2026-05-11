@@ -31,3 +31,10 @@ def sample_pdf_bytes():
         b"trailer\n<< /Size 4 /Root 1 0 R >>\n"
         b"startxref\n190\n%%EOF"
     )
+
+
+@pytest.fixture
+def sample_pdf_file(tmp_path, sample_pdf_bytes):
+    pdf_path = tmp_path / "test.pdf"
+    pdf_path.write_bytes(sample_pdf_bytes)
+    return str(pdf_path)
