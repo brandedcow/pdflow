@@ -61,7 +61,8 @@ def test_extract_identifies_text():
     with converter_patch, models_patch:
         from pipeline.extractor import extract
         blocks, _ = extract("/fake/path.pdf")
-    assert any(b.type == BlockType.text for b in blocks)
+    text_blocks = [b for b in blocks if b.type == BlockType.text]
+    assert len(text_blocks) >= 1
 
 
 def test_extract_identifies_tables():
@@ -97,3 +98,11 @@ def test_extract_uses_page_count_from_converter():
         from pipeline.extractor import extract
         _, page_count = extract("/fake/path.pdf")
     assert page_count == 1
+
+
+def test_extract_page_count_comes_from_converter():
+    converter_patch, models_patch = _mock_marker("# Title", page_count=5)
+    with converter_patch, models_patch:
+        from pipeline.extractor import extract
+        _, page_count = extract("/fake/path.pdf")
+    assert page_count == 5
