@@ -7,13 +7,13 @@ import { router } from 'expo-router';
 import { useLibrary } from '../src/hooks/useLibrary';
 import { Book } from '../src/types';
 
-function BookStatusIcon({ book, onRetry }: { book: Book; onRetry: () => void }) {
+function BookStatusIcon({ book, onRetry }: { book: Book; onRetry?: () => void }) {
   if (book.extractionStatus === 'pending') {
-    return <ActivityIndicator size="small" color="#9CA3AF" style={styles.statusIcon} />;
+    return <ActivityIndicator testID="extraction-pending" size="small" color="#9CA3AF" style={styles.statusIcon} />;
   }
   if (book.extractionStatus === 'failed') {
     return (
-      <TouchableOpacity onPress={onRetry} accessibilityLabel="Retry extraction" style={styles.statusIcon}>
+      <TouchableOpacity onPress={() => onRetry?.()} accessibilityLabel="Retry extraction" style={styles.statusIcon}>
         <Ionicons name="alert-circle-outline" size={20} color="#EF4444" />
       </TouchableOpacity>
     );
@@ -21,7 +21,7 @@ function BookStatusIcon({ book, onRetry }: { book: Book; onRetry: () => void }) 
   return null;
 }
 
-function BookRow({ book, onPress, onDelete, onRetry }: { book: Book; onPress: () => void; onDelete: () => void; onRetry: () => void }) {
+function BookRow({ book, onPress, onDelete, onRetry }: { book: Book; onPress: () => void; onDelete: () => void; onRetry?: () => void }) {
   const swipeableRef = useRef<Swipeable>(null);
 
   function handleDelete() {

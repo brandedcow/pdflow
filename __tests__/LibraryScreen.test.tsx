@@ -1,5 +1,5 @@
 import React from 'react';
-import { ActivityIndicator, Alert } from 'react-native';
+import { Alert } from 'react-native';
 import { render, fireEvent } from '@testing-library/react-native';
 import LibraryScreen from '../app/index';
 import { useLibrary } from '../src/hooks/useLibrary';
@@ -90,6 +90,23 @@ describe('LibraryScreen', () => {
     });
   });
 
+  it('navigates to reader when a pending book is tapped', () => {
+    const { router } = require('expo-router');
+    const book = makeBook({ extractionStatus: 'pending', extractionResult: undefined });
+    (useLibrary as jest.Mock).mockReturnValue({
+      books: [book],
+      importBook: mockImportBook,
+      deleteBook: mockDeleteBook,
+      retryExtraction: mockRetryExtraction,
+    });
+    const { getByText } = render(<LibraryScreen />);
+    fireEvent.press(getByText('test.pdf'));
+    expect(router.push).toHaveBeenCalledWith({
+      pathname: '/reader',
+      params: { bookId: book.id, uri: book.path },
+    });
+  });
+
   it('shows delete confirmation alert when delete action is pressed', () => {
     const alertSpy = jest.spyOn(Alert, 'alert');
     const book = makeBook();
@@ -132,8 +149,8 @@ describe('LibraryScreen', () => {
       deleteBook: mockDeleteBook,
       retryExtraction: mockRetryExtraction,
     });
-    const { UNSAFE_getByType } = render(<LibraryScreen />);
-    expect(UNSAFE_getByType(ActivityIndicator)).toBeTruthy();
+    const { getByTestId } = render(<LibraryScreen />);
+    expect(getByTestId('extraction-pending')).toBeTruthy();
   });
 
   it('shows retry icon for failed book', () => {
@@ -154,9 +171,9 @@ describe('LibraryScreen', () => {
       deleteBook: mockDeleteBook,
       retryExtraction: mockRetryExtraction,
     });
-    const { queryByLabelText, UNSAFE_queryByType } = render(<LibraryScreen />);
+    const { queryByLabelText, queryByTestId } = render(<LibraryScreen />);
     expect(queryByLabelText('Retry extraction')).toBeNull();
-    expect(UNSAFE_queryByType(ActivityIndicator)).toBeNull();
+    expect(queryByTestId('extraction-pending')).toBeNull();
   });
 
   it('calls retryExtraction with book id when retry icon is pressed', () => {
