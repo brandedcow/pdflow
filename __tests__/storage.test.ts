@@ -1,5 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { saveBook, loadBooks } from '../src/storage/storage';
+import { saveBook, loadBooks, replaceBook } from '../src/storage/storage';
 import { Book } from '../src/types';
 
 jest.mock('@react-native-async-storage/async-storage', () =>
@@ -11,6 +11,7 @@ const mockBook: Book = {
   filename: 'test.pdf',
   path: '/documents/pdfs/test.pdf',
   addedAt: '2026-05-09T00:00:00.000Z',
+  extractionStatus: 'pending',
 };
 
 describe('loadBooks', () => {
@@ -55,5 +56,30 @@ describe('saveBook', () => {
     const books = await loadBooks();
     expect(books).toHaveLength(2);
     expect(books[1]).toEqual(second);
+  });
+});
+
+describe('replaceBook', () => {
+  beforeEach(async () => {
+    await AsyncStorage.clear();
+  });
+
+  it('replaces a book by old id', async () => {
+    await saveBook(mockBook);
+    const updated: Book = { ...mockBook, id: 'new-id', extractionStatus: 'ready' };
+    await replaceBook('test-id-1', updated);
+    const books = await loadBooks();
+    expect(books).toHaveLength(1);
+    expect(books[0].id).toBe('new-id');
+    expect(books[0].extractionStatus).toBe('ready');
+  });
+
+  it('does nothing if old id is not found', async () => {
+    await saveBook(mockBook);
+    const other: Book = { ...mockBook, id: 'ghost-id' };
+    await replaceBook('ghost-id', other);
+    const books = await loadBooks();
+    expect(books).toHaveLength(1);
+    expect(books[0].id).toBe('test-id-1');
   });
 });

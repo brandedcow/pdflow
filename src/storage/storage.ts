@@ -17,3 +17,9 @@ export async function saveBook(book: Book): Promise<void> {
   const existing = await loadBooks();
   await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify([...existing, book]));
 }
+
+export async function replaceBook(oldId: string, newBook: Book): Promise<void> {
+  const existing = await loadBooks();
+  const updated = existing.map((b) => (b.id === oldId ? newBook : b));
+  await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
+}
