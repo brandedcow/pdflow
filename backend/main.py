@@ -1,19 +1,20 @@
 import logging
 import os
-import uuid
-import tempfile
 import sys
+import uuid
+from contextlib import asynccontextmanager
+from datetime import datetime, timedelta
 from pathlib import Path
+
 from dotenv import load_dotenv
-from fastapi import FastAPI, UploadFile, File
+from fastapi import FastAPI, File, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 
-# Ensure logs go to stdout and are visible in the terminal
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
     stream=sys.stdout,
-    force=True
+    force=True,
 )
 logger = logging.getLogger(__name__)
 
@@ -25,11 +26,26 @@ if not GROQ_API_KEY:
         "GROQ_API_KEY is not set. Add it to .env.local at the project root."
     )
 
-from pipeline.extractor import extract
-from pipeline.verifier import verify
-from models import ExtractionResponse, ExtractionStatus
+MAX_PDF_SIZE_BYTES = int(os.environ.get("MAX_PDF_SIZE_MB", "100")) * 1024 * 1024
+UPLOADS_DIR = Path(__file__).parent / "uploads"
 
-app = FastAPI(title="pdflow extraction API")
+from models import JobStatusResponse, JobSubmitResponse
+from jobs.store import get_job_status, job_exists, register_job
+from jobs.tasks import process_pdf
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    UPLOADS_DIR.mkdir(parents=True, exist_ok=True)
+    cutoff = datetime.now() - timedelta(hours=24)
+    for f in UPLOADS_DIR.glob("*.pdf"):
+        if datetime.fromtimestamp(f.stat().st_mtime) < cutoff:
+            f.unlink(missing_ok=True)
+            logger.info("Purged orphaned upload: %s", f.name)
+    yield
+
+
+app = FastAPI(title="pdflow extraction API", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
@@ -40,61 +56,38 @@ app.add_middleware(
 )
 
 
-@app.post("/extract", response_model=ExtractionResponse)
-async def extract_pdf(pdf_file: UploadFile = File(...)) -> ExtractionResponse:
-    book_id = str(uuid.uuid4())
-    print(f"\n[DEBUG] Received request for {pdf_file.filename} (book_id: {book_id})")
+@app.post("/extract", response_model=JobSubmitResponse)
+async def submit_extraction(pdf_file: UploadFile = File(...)) -> JobSubmitResponse:
+    content = await pdf_file.read()
 
-    with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as tmp:
-        content = await pdf_file.read()
-        tmp.write(content)
-        tmp_path = tmp.name
-    
-    print(f"[DEBUG] Saved PDF to temp file: {tmp_path}")
+    if len(content) == 0:
+        raise HTTPException(status_code=422, detail="File is empty")
+
+    if len(content) > MAX_PDF_SIZE_BYTES:
+        max_mb = MAX_PDF_SIZE_BYTES // (1024 * 1024)
+        raise HTTPException(status_code=413, detail=f"File exceeds {max_mb}MB limit")
+
+    if not content.startswith(b"%PDF"):
+        raise HTTPException(status_code=422, detail="File is not a valid PDF")
+
+    job_id = str(uuid.uuid4())
+    UPLOADS_DIR.mkdir(parents=True, exist_ok=True)
+    file_path = str(UPLOADS_DIR / f"{job_id}.pdf")
 
     try:
-        try:
-            print(f"[DEBUG] Invoking marker extraction for {tmp_path}...")
-            blocks, page_count = extract(tmp_path)
-            print(f"[DEBUG] Extraction completed. Blocks: {len(blocks)}, Pages: {page_count}")
-        except Exception as e:
-            logger.error(f"Extraction CRASHED for {book_id}: {str(e)}", exc_info=True)
-            print(f"[DEBUG] Extraction ERROR: {str(e)}")
-            return ExtractionResponse(
-                book_id=book_id,
-                status=ExtractionStatus.failed,
-                overall_confidence=0.0,
-                page_count=1,
-                blocks=[],
-            )
+        Path(file_path).write_bytes(content)
+    except OSError as e:
+        logger.error("Failed to write upload for %s: %s", job_id, e)
+        raise HTTPException(status_code=500, detail="Failed to save uploaded file") from e
 
-        if not blocks:
-            return ExtractionResponse(
-                book_id=book_id,
-                status=ExtractionStatus.failed,
-                overall_confidence=0.0,
-                page_count=page_count,
-                blocks=[],
-            )
+    register_job(job_id)
+    process_pdf.apply_async(args=[job_id, file_path], task_id=job_id)
 
-        scored_blocks = verify(blocks)
-        overall_confidence = round(
-            sum(b.confidence for b in scored_blocks) / len(scored_blocks), 3
-        )
+    return JobSubmitResponse(job_id=job_id, status="queued")
 
-        if overall_confidence >= 0.8:
-            status = ExtractionStatus.success
-        elif overall_confidence >= 0.5:
-            status = ExtractionStatus.partial
-        else:
-            status = ExtractionStatus.failed
 
-        return ExtractionResponse(
-            book_id=book_id,
-            status=status,
-            overall_confidence=overall_confidence,
-            page_count=page_count,
-            blocks=scored_blocks,
-        )
-    finally:
-        Path(tmp_path).unlink(missing_ok=True)
+@app.get("/jobs/{job_id}", response_model=JobStatusResponse)
+async def get_job(job_id: str) -> JobStatusResponse:
+    if not job_exists(job_id):
+        raise HTTPException(status_code=404, detail="Job not found")
+    return JobStatusResponse(**get_job_status(job_id))
