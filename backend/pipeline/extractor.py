@@ -1,14 +1,14 @@
 from typing import Any
 
-from marker.convert import convert_single_pdf
-from marker.models import load_all_models as create_model_dict
+from marker.converters.pdf import PdfConverter
+from marker.models import create_model_dict
 from models import Block, BlockType
 
 # Loaded once at module level to avoid reloading on every request
-_model_list: list[Any] | None = None
+_model_list: dict[str, Any] | None = None
 
 
-def _get_models() -> list:
+def _get_models() -> dict:
     global _model_list
     if _model_list is None:
         _model_list = create_model_dict()
@@ -23,8 +23,10 @@ def extract(file_path: str) -> tuple[list[Block], int]:
     to ensure models are loaded once before any requests are served.
     """
     model_dict = _get_models()
-    full_text, _images, out_meta = convert_single_pdf(file_path, model_dict)
-    page_count = out_meta.get("page_count", 1)
+    converter = PdfConverter(model_dict)
+    rendered = converter(file_path)
+    full_text = rendered.markdown
+    page_count = converter.page_count
     blocks = _parse_markdown(full_text)
     return blocks, page_count
 
