@@ -1,4 +1,5 @@
 from enum import Enum
+from typing import Literal
 from pydantic import BaseModel, field_validator
 
 
@@ -9,6 +10,14 @@ class BlockType(str, Enum):
 
 
 class ExtractionStatus(str, Enum):
+    success = "success"
+    partial = "partial"
+    failed = "failed"
+
+
+class JobStatus(str, Enum):
+    queued = "queued"
+    processing = "processing"
     success = "success"
     partial = "partial"
     failed = "failed"
@@ -55,3 +64,16 @@ class ExtractionResponse(BaseModel):
         if v < 1:
             raise ValueError("page_count must be >= 1")
         return v
+
+
+class JobSubmitResponse(BaseModel):
+    job_id: str
+    status: Literal["queued"]
+
+
+class JobStatusResponse(BaseModel):
+    job_id: str
+    status: JobStatus
+    overall_confidence: float | None = None
+    page_count: int | None = None
+    blocks: list[Block] | None = None
