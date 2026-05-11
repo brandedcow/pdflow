@@ -7,7 +7,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 pdflow is a two-system project:
 
 1. **Mobile app** — React Native (Expo) PDF reader for iOS and Android. Device-only storage, continuous scroll, no annotations.
-2. **Backend** — Python FastAPI service for LLM-assisted PDF text extraction. Runs locally at `http://localhost:8000`.
+2. **Backend** — Python FastAPI service for LLM-assisted PDF text extraction. Runs locally at `http://localhost:8000` (simulator) or via Cloudflare Tunnel (real device).
 
 ## Mobile App Commands
 
@@ -56,26 +56,52 @@ pytest tests/test_verifier.py -v
 pytest tests/test_main.py::test_extract_returns_200_with_valid_pdf -v
 ```
 
-**Prerequisite:** `.env.local` at the project root must contain `GROQ_API_KEY=your_key_here`.
+**Prerequisites:**
+- `.env.local` at the project root must contain `GROQ_API_KEY=your_key_here`.
+- For real device testing, expose the backend via Cloudflare Tunnel (see below) and set `EXPO_PUBLIC_BACKEND_URL` in `.env.local`.
+
+## Real Device Development
+
+On a real device, `localhost` resolves to the device itself — not the dev machine. Use Cloudflare Tunnel to expose the backend.
+
+**Each dev session:**
+
+1. Start the backend (`uvicorn main:app --reload` from the venv)
+2. In a separate terminal, start the tunnel:
+   ```bash
+   npm run start:tunnel
+   ```
+3. Copy the printed `https://<something>.trycloudflare.com` URL — it changes every session
+4. Update `.env.local` at the project root:
+   ```
+   EXPO_PUBLIC_BACKEND_URL=https://<something>.trycloudflare.com
+   ```
+5. Start (or restart) the Expo dev server: `npm start`
+
+The `EXPO_PUBLIC_BACKEND_URL` value is baked into the bundle at dev-server start time, so the Expo server must be (re)started after updating it.
 
 ## Architecture
 
 ### Mobile Layer Boundaries
 
 ```
-app/_layout.tsx         — Expo Router root; wraps tree with SafeAreaProvider + LibraryProvider
-app/index.tsx           — LibraryScreen (book list, import FAB)
-app/reader.tsx          — ReaderScreen (thin route; reads params, renders ReaderContainer)
-src/context/LibraryContext.tsx  — Single source of truth for books[]; owns importBook()
-src/storage/storage.ts  — Pure AsyncStorage I/O: loadBooks, saveBook, replaceBook
-src/hooks/useLibrary.ts — Context consumer hook; throws if used outside LibraryProvider
-src/types/index.ts      — Book type (id, filename, path, addedAt, extractionStatus, extractionResult)
+app/_layout.tsx                        — Expo Router root; wraps tree with SafeAreaProvider + LibraryProvider
+app/index.tsx                          — LibraryScreen (book list, import FAB)
+app/reader.tsx                         — ReaderScreen; owns activeView state and header icons (toggle, retry)
+src/context/LibraryContext.tsx         — Single source of truth for books[]; owns importBook(), retryExtraction()
+src/storage/storage.ts                 — Pure AsyncStorage I/O: loadBooks, saveBook, replaceBook
+src/hooks/useLibrary.ts                — Context consumer hook; throws if used outside LibraryProvider
+src/types/index.ts                     — Book type (id, filename, path, addedAt, extractionStatus, extractionResult)
+src/api/extractionApi.ts               — HTTP client; FormData POST to /extract; returns typed ExtractionResult
+src/components/reader/ReaderContainer.tsx — Pure view-switcher; renders ExtractedReader or NativePdfViewer based on activeView + extractionStatus
 ```
 
 **Key data flows:**
 - `importBook()` copies the PDF to `<documentDirectory>/pdfs/<uuid>-<filename>`, persists metadata to AsyncStorage, then POSTs to the backend. The book is added to state immediately with `extractionStatus: 'pending'`, then updated to `'ready'` or `'failed'` when the backend responds.
 - `Book.id` comes from the backend's returned `book_id`, not from the mobile app. The preliminary UUID used during the `pending` phase is replaced after extraction completes.
 - `expo-file-system/legacy` is the import path for the legacy procedural API (`documentDirectory`, `copyAsync`, `moveAsync`). The main `expo-file-system` export uses a new OO API and does not expose these.
+- `ReaderContainer` is a pure view-switcher driven by `activeView` (`'pdf' | 'reader'`) owned by `reader.tsx`. It renders `ExtractedReader` only when `activeView === 'reader'` AND `extractionStatus === 'ready'`; otherwise renders `NativePdfViewer`. Status messaging (toggle icon greyed when pending, retry icon when failed) lives in the `reader.tsx` header, not in `ReaderContainer`. Backend statuses `success` and `partial` are both mapped to `'ready'` on the mobile side.
+- `retryExtraction(bookId)` resets a `'failed'` book to `'pending'` and re-runs `runExtraction`. It is a no-op for `'pending'` or `'ready'` books.
 
 ### Backend Layer Boundaries
 
