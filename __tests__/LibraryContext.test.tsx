@@ -141,6 +141,10 @@ describe('LibraryContext', () => {
   });
 
   describe('deleteBook', () => {
+    beforeEach(() => {
+      (FileSystem.deleteAsync as jest.Mock).mockResolvedValue(undefined);
+    });
+
     const storedBook = {
       id: 'stored-id',
       filename: 'stored.pdf',
@@ -163,6 +167,8 @@ describe('LibraryContext', () => {
         '/mock/documents/pdfs/stored.pdf',
         { idempotent: true }
       );
+      const raw = await AsyncStorage.getItem('pdflow_books');
+      expect(JSON.parse(raw!)).toHaveLength(0);
     });
 
     it('shows alert and does not remove book if filesystem delete throws', async () => {
