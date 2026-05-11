@@ -103,4 +103,15 @@ describe('ReaderScreen', () => {
     fireEvent.press(getByLabelText('Retry extraction'));
     expect(mockRetryExtraction).toHaveBeenCalledWith('book-1');
   });
+
+  it('pressing toggle when ready switches the view icon', () => {
+    const book = makeBook();
+    (useLibrary as jest.Mock).mockReturnValue({ books: [book], retryExtraction: mockRetryExtraction });
+    const { getByLabelText, getByText } = render(<ReaderScreen />);
+    // Initially in reader mode (book is ready) — icon shows 'document-outline' (switch-to-pdf icon)
+    expect(getByText('document-outline')).toBeTruthy();
+    fireEvent.press(getByLabelText('Toggle view'));
+    // After toggle — now in pdf mode, icon shows 'document-text-outline' (switch-to-reader icon)
+    expect(getByText('document-text-outline')).toBeTruthy();
+  });
 });

@@ -26,8 +26,8 @@ export default function ReaderScreen() {
     setActiveView((v) => (v === 'reader' ? 'pdf' : 'reader'));
   }
 
-  async function handleRetry() {
-    if (bookId) await retryExtraction(bookId);
+  function handleRetry() {
+    if (bookId) void retryExtraction(bookId);
   }
 
   return (
