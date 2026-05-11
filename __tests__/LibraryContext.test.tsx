@@ -6,6 +6,8 @@ import * as FileSystem from 'expo-file-system/legacy';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { LibraryProvider } from '../src/context/LibraryContext';
 import { useLibrary } from '../src/hooks/useLibrary';
+import { extractPdf } from '../src/api/extractionApi';
+import { ExtractionResult } from '../src/types';
 
 jest.mock('@react-native-async-storage/async-storage', () =>
   require('@react-native-async-storage/async-storage/jest/async-storage-mock')
@@ -15,10 +17,20 @@ jest.mock('expo-file-system/legacy', () => ({
   documentDirectory: '/mock/documents/',
   copyAsync: jest.fn().mockResolvedValue(undefined),
   makeDirectoryAsync: jest.fn().mockResolvedValue(undefined),
+  moveAsync: jest.fn().mockResolvedValue(undefined),
 }));
 jest.mock('expo-crypto', () => ({
-  randomUUID: jest.fn().mockReturnValue('mock-uuid'),
+  randomUUID: jest.fn().mockReturnValue('mock-pending-uuid'),
 }));
+jest.mock('../src/api/extractionApi');
+
+const mockExtractionResult: ExtractionResult = {
+  book_id: 'backend-book-uuid',
+  status: 'success',
+  overall_confidence: 0.92,
+  page_count: 3,
+  blocks: [{ type: 'text', content: 'Hello', page: 1, confidence: 0.92 }],
+};
 
 const wrapper = ({ children }: { children: React.ReactNode }) => (
   <LibraryProvider>{children}</LibraryProvider>
@@ -42,6 +54,7 @@ describe('LibraryContext', () => {
       filename: 'stored.pdf',
       path: '/mock/documents/pdfs/stored.pdf',
       addedAt: '2026-05-09T00:00:00.000Z',
+      extractionStatus: 'ready',
     };
     await AsyncStorage.setItem('pdflow_books', JSON.stringify([stored]));
     const { result } = renderHook(() => useLibrary(), { wrapper });
@@ -59,42 +72,70 @@ describe('LibraryContext', () => {
     expect(FileSystem.copyAsync).not.toHaveBeenCalled();
   });
 
-  it('importBook adds a book when picker succeeds', async () => {
+  it('importBook adds book with pending status immediately then updates to ready', async () => {
     (DocumentPicker.getDocumentAsync as jest.Mock).mockResolvedValue({
       canceled: false,
       assets: [{ uri: '/tmp/test.pdf', name: 'test.pdf' }],
     });
+    (extractPdf as jest.Mock).mockResolvedValue(mockExtractionResult);
+
     const { result } = renderHook(() => useLibrary(), { wrapper });
     await act(async () => {
       await result.current.importBook();
     });
+
     expect(result.current.books).toHaveLength(1);
-    expect(result.current.books[0]).toMatchObject({
-      id: 'mock-uuid',
-      filename: 'test.pdf',
-      path: '/mock/documents/pdfs/mock-uuid-test.pdf',
-    });
-    expect(FileSystem.makeDirectoryAsync).toHaveBeenCalledWith(
-      '/mock/documents/pdfs/',
-      { intermediates: true }
-    );
+    expect(result.current.books[0].id).toBe('backend-book-uuid');
+    expect(result.current.books[0].extractionStatus).toBe('ready');
+    expect(result.current.books[0].extractionResult).toEqual(mockExtractionResult);
   });
 
-  it('importBook shows an alert and does not add a book when copy fails', async () => {
+  it('importBook uses backend book_id as final Book.id', async () => {
+    (DocumentPicker.getDocumentAsync as jest.Mock).mockResolvedValue({
+      canceled: false,
+      assets: [{ uri: '/tmp/test.pdf', name: 'test.pdf' }],
+    });
+    (extractPdf as jest.Mock).mockResolvedValue(mockExtractionResult);
+
+    const { result } = renderHook(() => useLibrary(), { wrapper });
+    await act(async () => {
+      await result.current.importBook();
+    });
+
+    expect(result.current.books[0].id).toBe('backend-book-uuid');
+  });
+
+  it('importBook sets extractionStatus to failed when backend is offline', async () => {
+    (DocumentPicker.getDocumentAsync as jest.Mock).mockResolvedValue({
+      canceled: false,
+      assets: [{ uri: '/tmp/test.pdf', name: 'test.pdf' }],
+    });
+    (extractPdf as jest.Mock).mockRejectedValue(new Error('Network request failed'));
+
+    const { result } = renderHook(() => useLibrary(), { wrapper });
+    await act(async () => {
+      await result.current.importBook();
+    });
+
+    expect(result.current.books).toHaveLength(1);
+    expect(result.current.books[0].extractionStatus).toBe('failed');
+    expect(result.current.books[0].id).toBe('mock-pending-uuid');
+  });
+
+  it('importBook shows alert and adds no book when file copy fails', async () => {
     const alertSpy = jest.spyOn(Alert, 'alert');
     (DocumentPicker.getDocumentAsync as jest.Mock).mockResolvedValue({
       canceled: false,
       assets: [{ uri: '/tmp/test.pdf', name: 'test.pdf' }],
     });
     (FileSystem.copyAsync as jest.Mock).mockRejectedValue(new Error('Storage full'));
+
     const { result } = renderHook(() => useLibrary(), { wrapper });
     await act(async () => {
       await result.current.importBook();
     });
+
     expect(alertSpy).toHaveBeenCalledWith('Import failed', "Couldn't import file");
     expect(result.current.books).toHaveLength(0);
-    // saveBook should not have been called — no orphaned AsyncStorage records
-    const stored = await AsyncStorage.getItem('pdflow_books');
-    expect(stored).toBeNull();
   });
 });

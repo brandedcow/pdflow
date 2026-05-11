@@ -3,8 +3,9 @@ import { Alert } from 'react-native';
 import * as DocumentPicker from 'expo-document-picker';
 import * as FileSystem from 'expo-file-system/legacy';
 import * as Crypto from 'expo-crypto';
-import { Book } from '../types';
-import { loadBooks, saveBook } from '../storage/storage';
+import { Book, ExtractionStatus } from '../types';
+import { loadBooks, saveBook, replaceBook } from '../storage/storage';
+import { extractPdf } from '../api/extractionApi';
 
 type LibraryContextType = {
   books: Book[];
@@ -29,29 +30,59 @@ export function LibraryProvider({ children }: { children: React.ReactNode }) {
     if (result.canceled) return;
 
     const asset = result.assets[0];
-    const id = Crypto.randomUUID();
+    const pendingId = Crypto.randomUUID();
     const destDir = `${FileSystem.documentDirectory}pdfs/`;
-    const destPath = `${destDir}${id}-${asset.name}`;
+    const pendingPath = `${destDir}${pendingId}-${asset.name}`;
 
     try {
       await FileSystem.makeDirectoryAsync(destDir, { intermediates: true });
-      await FileSystem.copyAsync({ from: asset.uri, to: destPath });
-
-      const book: Book = {
-        id,
-        filename: asset.name,
-        path: destPath,
-        addedAt: new Date().toISOString(),
-      };
-
-      await saveBook(book);
-      setBooks((prev) => [...prev, book]);
+      await FileSystem.copyAsync({ from: asset.uri, to: pendingPath });
     } catch {
       Alert.alert('Import failed', "Couldn't import file");
+      return;
+    }
+
+    const pendingBook: Book = {
+      id: pendingId,
+      filename: asset.name,
+      path: pendingPath,
+      addedAt: new Date().toISOString(),
+      extractionStatus: 'pending',
+    };
+
+    await saveBook(pendingBook);
+    setBooks((prev) => [...prev, pendingBook]);
+
+    try {
+      const extractionResult = await extractPdf(pendingPath);
+      const bookId = extractionResult.book_id;
+      const finalPath = `${destDir}${bookId}-${asset.name}`;
+
+      await FileSystem.moveAsync({ from: pendingPath, to: finalPath });
+
+      const extractionStatus: ExtractionStatus =
+        extractionResult.status === 'failed' ? 'failed' : 'ready';
+
+      const finalBook: Book = {
+        ...pendingBook,
+        id: bookId,
+        path: finalPath,
+        extractionStatus,
+        extractionResult,
+      };
+
+      await replaceBook(pendingId, finalBook);
+      setBooks((prev) => prev.map((b) => (b.id === pendingId ? finalBook : b)));
+    } catch {
+      const failedBook: Book = { ...pendingBook, extractionStatus: 'failed' };
+      await replaceBook(pendingId, failedBook);
+      setBooks((prev) => prev.map((b) => (b.id === pendingId ? failedBook : b)));
     }
   }
 
   return (
-    <LibraryContext.Provider value={{ books, importBook }}>{children}</LibraryContext.Provider>
+    <LibraryContext.Provider value={{ books, importBook }}>
+      {children}
+    </LibraryContext.Provider>
   );
 }
