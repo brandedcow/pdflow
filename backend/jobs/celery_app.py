@@ -3,7 +3,7 @@ from celery import Celery
 
 _BASE_DIR = Path(__file__).parent.parent
 _DATA_DIR = _BASE_DIR / "data"
-_DATA_DIR.mkdir(exist_ok=True)
+_DATA_DIR.mkdir(parents=True, exist_ok=True)  # idempotent; safe for single-worker local dev
 
 celery_app = Celery(
     "pdflow",
