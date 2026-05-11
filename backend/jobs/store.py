@@ -40,7 +40,16 @@ def get_job_status(job_id: str) -> dict:
     elif state == "STARTED":
         return {"job_id": job_id, "status": "processing"}
     elif state == "SUCCESS":
-        return result.get()
+        try:
+            return result.get()
+        except Exception:
+            return {
+                "job_id": job_id,
+                "status": "failed",
+                "overall_confidence": 0.0,
+                "page_count": 1,
+                "blocks": [],
+            }
     else:
         return {
             "job_id": job_id,
