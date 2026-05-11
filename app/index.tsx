@@ -1,12 +1,27 @@
 import React, { useRef } from 'react';
-import { Alert, FlatList, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Alert, FlatList, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Swipeable } from 'react-native-gesture-handler';
+import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { useLibrary } from '../src/hooks/useLibrary';
 import { Book } from '../src/types';
 
-function BookRow({ book, onPress, onDelete }: { book: Book; onPress: () => void; onDelete: () => void }) {
+function BookStatusIcon({ book, onRetry }: { book: Book; onRetry: () => void }) {
+  if (book.extractionStatus === 'pending') {
+    return <ActivityIndicator size="small" color="#9CA3AF" style={styles.statusIcon} />;
+  }
+  if (book.extractionStatus === 'failed') {
+    return (
+      <TouchableOpacity onPress={onRetry} accessibilityLabel="Retry extraction" style={styles.statusIcon}>
+        <Ionicons name="alert-circle-outline" size={20} color="#EF4444" />
+      </TouchableOpacity>
+    );
+  }
+  return null;
+}
+
+function BookRow({ book, onPress, onDelete, onRetry }: { book: Book; onPress: () => void; onDelete: () => void; onRetry: () => void }) {
   const swipeableRef = useRef<Swipeable>(null);
 
   function handleDelete() {
@@ -42,15 +57,18 @@ function BookRow({ book, onPress, onDelete }: { book: Book; onPress: () => void;
   return (
     <Swipeable ref={swipeableRef} renderRightActions={renderRightActions}>
       <TouchableOpacity style={styles.bookItem} onPress={onPress}>
-        <Text style={styles.bookTitle}>{book.filename}</Text>
-        <Text style={styles.bookDate}>{new Date(book.addedAt).toLocaleDateString()}</Text>
+        <View style={styles.bookInfo}>
+          <Text style={styles.bookTitle}>{book.filename}</Text>
+          <Text style={styles.bookDate}>{new Date(book.addedAt).toLocaleDateString()}</Text>
+        </View>
+        <BookStatusIcon book={book} onRetry={onRetry} />
       </TouchableOpacity>
     </Swipeable>
   );
 }
 
 export default function LibraryScreen() {
-  const { books, importBook, deleteBook } = useLibrary();
+  const { books, importBook, deleteBook, retryExtraction } = useLibrary();
 
   function handleBookPress(book: Book) {
     router.push({ pathname: '/reader', params: { bookId: book.id, uri: book.path } });
@@ -68,7 +86,12 @@ export default function LibraryScreen() {
           keyExtractor={(item) => item.id}
           contentContainerStyle={{ paddingBottom: 80 }}
           renderItem={({ item }) => (
-            <BookRow book={item} onPress={() => handleBookPress(item)} onDelete={() => deleteBook(item.id)} />
+            <BookRow
+              book={item}
+              onPress={() => handleBookPress(item)}
+              onDelete={() => deleteBook(item.id)}
+              onRetry={() => retryExtraction(item.id)}
+            />
           )}
         />
       )}
@@ -84,13 +107,17 @@ const styles = StyleSheet.create({
   emptyContainer: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   emptyText: { fontSize: 16, color: '#888', textAlign: 'center', paddingHorizontal: 32 },
   bookItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
     paddingHorizontal: 16,
     paddingVertical: 12,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: '#eee',
   },
+  bookInfo: { flex: 1 },
   bookTitle: { fontSize: 16, fontWeight: '600', color: '#111' },
   bookDate: { fontSize: 12, color: '#888', marginTop: 2 },
+  statusIcon: { marginLeft: 12 },
   deleteAction: {
     backgroundColor: '#ff3b30',
     justifyContent: 'center',
