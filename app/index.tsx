@@ -1,9 +1,54 @@
-import React from 'react';
-import { FlatList, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import React, { useRef } from 'react';
+import { Alert, FlatList, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { Swipeable } from 'react-native-gesture-handler';
 import { router } from 'expo-router';
 import { useLibrary } from '../src/hooks/useLibrary';
 import { Book } from '../src/types';
+
+function BookRow({ book, onPress }: { book: Book; onPress: () => void }) {
+  const swipeableRef = useRef<Swipeable>(null);
+  const { deleteBook } = useLibrary();
+
+  function handleDelete() {
+    Alert.alert(
+      `Delete "${book.filename}"?`,
+      'This cannot be undone.',
+      [
+        {
+          text: 'Cancel',
+          style: 'cancel',
+          onPress: () => swipeableRef.current?.close(),
+        },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: () => {
+            swipeableRef.current?.close();
+            deleteBook(book.id);
+          },
+        },
+      ]
+    );
+  }
+
+  function renderRightActions() {
+    return (
+      <TouchableOpacity style={styles.deleteAction} onPress={handleDelete}>
+        <Text style={styles.deleteActionText}>Delete</Text>
+      </TouchableOpacity>
+    );
+  }
+
+  return (
+    <Swipeable ref={swipeableRef} renderRightActions={renderRightActions}>
+      <TouchableOpacity style={styles.bookItem} onPress={onPress}>
+        <Text style={styles.bookTitle}>{book.filename}</Text>
+        <Text style={styles.bookDate}>{new Date(book.addedAt).toLocaleDateString()}</Text>
+      </TouchableOpacity>
+    </Swipeable>
+  );
+}
 
 export default function LibraryScreen() {
   const { books, importBook } = useLibrary();
@@ -24,10 +69,7 @@ export default function LibraryScreen() {
           keyExtractor={(item) => item.id}
           contentContainerStyle={{ paddingBottom: 80 }}
           renderItem={({ item }) => (
-            <TouchableOpacity style={styles.bookItem} onPress={() => handleBookPress(item)}>
-              <Text style={styles.bookTitle}>{item.filename}</Text>
-              <Text style={styles.bookDate}>{new Date(item.addedAt).toLocaleDateString()}</Text>
-            </TouchableOpacity>
+            <BookRow book={item} onPress={() => handleBookPress(item)} />
           )}
         />
       )}
@@ -50,6 +92,13 @@ const styles = StyleSheet.create({
   },
   bookTitle: { fontSize: 16, fontWeight: '600', color: '#111' },
   bookDate: { fontSize: 12, color: '#888', marginTop: 2 },
+  deleteAction: {
+    backgroundColor: '#ff3b30',
+    justifyContent: 'center',
+    alignItems: 'center',
+    width: 80,
+  },
+  deleteActionText: { color: '#fff', fontSize: 14, fontWeight: '600' },
   fab: {
     position: 'absolute',
     bottom: 32,
