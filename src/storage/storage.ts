@@ -27,5 +27,6 @@ export async function replaceBook(oldId: string, newBook: Book): Promise<void> {
 export async function deleteBook(id: string): Promise<void> {
   const existing = await loadBooks();
   const updated = existing.filter((b) => b.id !== id);
+  if (updated.length === existing.length) return;
   await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
 }
