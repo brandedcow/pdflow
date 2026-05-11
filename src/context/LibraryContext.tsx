@@ -12,6 +12,7 @@ type LibraryContextType = {
   books: Book[];
   importBook: () => Promise<void>;
   deleteBook: (id: string) => Promise<void>;
+  retryExtraction: (bookId: string) => Promise<void>;
 };
 
 export const LibraryContext = createContext<LibraryContextType | null>(null);
@@ -22,6 +23,31 @@ export function LibraryProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     loadBooks().then(setBooks);
   }, []);
+
+  async function runExtraction(currentId: string, book: Book): Promise<void> {
+    const destDir = `${FileSystem.documentDirectory}pdfs/`;
+    try {
+      const extractionResult = await extractPdf(book.path);
+      const bookId = extractionResult.book_id;
+      const finalPath = `${destDir}${bookId}-${book.filename}`;
+      new FSFile(book.path).move(new FSFile(finalPath));
+      const extractionStatus: ExtractionStatus =
+        extractionResult.status === 'failed' ? 'failed' : 'ready';
+      const finalBook: Book = {
+        ...book,
+        id: bookId,
+        path: finalPath,
+        extractionStatus,
+        extractionResult,
+      };
+      await replaceBook(currentId, finalBook);
+      setBooks((prev) => prev.map((b) => (b.id === currentId ? finalBook : b)));
+    } catch {
+      const failedBook: Book = { ...book, extractionStatus: 'failed' };
+      await replaceBook(currentId, failedBook);
+      setBooks((prev) => prev.map((b) => (b.id === currentId ? failedBook : b)));
+    }
+  }
 
   async function importBook(): Promise<void> {
     const result = await DocumentPicker.getDocumentAsync({
@@ -60,32 +86,17 @@ export function LibraryProvider({ children }: { children: React.ReactNode }) {
 
     await saveBook(pendingBook);
     setBooks((prev) => [...prev, pendingBook]);
+    await runExtraction(pendingId, pendingBook);
+  }
 
-    try {
-      const extractionResult = await extractPdf(pendingPath);
-      const bookId = extractionResult.book_id;
-      const finalPath = `${destDir}${bookId}-${asset.name}`;
+  async function retryExtraction(bookId: string): Promise<void> {
+    const book = books.find((b) => b.id === bookId);
+    if (!book || book.extractionStatus === 'pending') return;
 
-      new FSFile(pendingPath).move(new FSFile(finalPath));
-
-      const extractionStatus: ExtractionStatus =
-        extractionResult.status === 'failed' ? 'failed' : 'ready';
-
-      const finalBook: Book = {
-        ...pendingBook,
-        id: bookId,
-        path: finalPath,
-        extractionStatus,
-        extractionResult,
-      };
-
-      await replaceBook(pendingId, finalBook);
-      setBooks((prev) => prev.map((b) => (b.id === pendingId ? finalBook : b)));
-    } catch {
-      const failedBook: Book = { ...pendingBook, extractionStatus: 'failed' };
-      await replaceBook(pendingId, failedBook);
-      setBooks((prev) => prev.map((b) => (b.id === pendingId ? failedBook : b)));
-    }
+    const pendingBook: Book = { ...book, extractionStatus: 'pending' };
+    await replaceBook(bookId, pendingBook);
+    setBooks((prev) => prev.map((b) => (b.id === bookId ? pendingBook : b)));
+    await runExtraction(bookId, pendingBook);
   }
 
   async function deleteBook(id: string): Promise<void> {
@@ -106,7 +117,7 @@ export function LibraryProvider({ children }: { children: React.ReactNode }) {
   }
 
   return (
-    <LibraryContext.Provider value={{ books, importBook, deleteBook }}>
+    <LibraryContext.Provider value={{ books, importBook, deleteBook, retryExtraction }}>
       {children}
     </LibraryContext.Provider>
   );

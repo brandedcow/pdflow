@@ -230,4 +230,70 @@ describe('LibraryContext', () => {
       expect(result.current.books).toHaveLength(0);
     });
   });
+
+  describe('retryExtraction', () => {
+    const failedBook = {
+      id: 'failed-id',
+      filename: 'test.pdf',
+      path: '/mock/documents/pdfs/failed-id-test.pdf',
+      addedAt: '2026-05-11T00:00:00.000Z',
+      extractionStatus: 'failed' as const,
+    };
+
+    it('sets status to pending then ready on success', async () => {
+      await AsyncStorage.setItem('pdflow_books', JSON.stringify([failedBook]));
+      (extractPdf as jest.Mock).mockResolvedValue(mockExtractionResult);
+
+      const { result } = renderHook(() => useLibrary(), { wrapper });
+      await act(async () => {});
+
+      await act(async () => {
+        await result.current.retryExtraction('failed-id');
+      });
+
+      expect(result.current.books[0].id).toBe('backend-book-uuid');
+      expect(result.current.books[0].extractionStatus).toBe('ready');
+      expect(result.current.books[0].extractionResult).toEqual(mockExtractionResult);
+    });
+
+    it('sets status back to failed when extraction throws', async () => {
+      await AsyncStorage.setItem('pdflow_books', JSON.stringify([failedBook]));
+      (extractPdf as jest.Mock).mockRejectedValue(new Error('Network error'));
+
+      const { result } = renderHook(() => useLibrary(), { wrapper });
+      await act(async () => {});
+
+      await act(async () => {
+        await result.current.retryExtraction('failed-id');
+      });
+
+      expect(result.current.books[0].extractionStatus).toBe('failed');
+    });
+
+    it('is a no-op when book is already pending', async () => {
+      const pendingBook = { ...failedBook, id: 'pending-id', extractionStatus: 'pending' as const };
+      await AsyncStorage.setItem('pdflow_books', JSON.stringify([pendingBook]));
+
+      const { result } = renderHook(() => useLibrary(), { wrapper });
+      await act(async () => {});
+
+      await act(async () => {
+        await result.current.retryExtraction('pending-id');
+      });
+
+      expect(extractPdf).not.toHaveBeenCalled();
+      expect(result.current.books[0].extractionStatus).toBe('pending');
+    });
+
+    it('is a no-op when book id is not found', async () => {
+      const { result } = renderHook(() => useLibrary(), { wrapper });
+      await act(async () => {});
+
+      await act(async () => {
+        await result.current.retryExtraction('nonexistent-id');
+      });
+
+      expect(extractPdf).not.toHaveBeenCalled();
+    });
+  });
 });
