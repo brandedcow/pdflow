@@ -8,9 +8,11 @@
     "ios": "expo start --ios",
     "web": "expo start --web",
     "build:dev": "eas build --profile development --platform ios",
-    "generate:types": "openapi-typescript http://localhost:8000/openapi.json -o src/types/generated.ts"
+    "generate:types": "openapi-typescript http://localhost:8000/openapi.json -o src/types/generated.ts",
+    "start:tunnel": "cloudflared tunnel --url http://localhost:8000"
   },
   "dependencies": {
+    "@expo/vector-icons": "^15.1.1",
     "@react-native-async-storage/async-storage": "2.2.0",
     "expo": "~54.0.33",
     "expo-constants": "~18.0.13",
