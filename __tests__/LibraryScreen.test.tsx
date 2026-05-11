@@ -82,4 +82,18 @@ describe('LibraryScreen', () => {
       expect.any(Array)
     );
   });
+
+  it('calls deleteBook with the book id when delete is confirmed', () => {
+    jest.spyOn(Alert, 'alert');
+    const book = makeBook();
+    (useLibrary as jest.Mock).mockReturnValue({ books: [book], importBook: mockImportBook, deleteBook: mockDeleteBook });
+    const { getByText } = render(<LibraryScreen />);
+    fireEvent.press(getByText('Delete'));
+
+    const buttons = (Alert.alert as jest.Mock).mock.calls[0][2];
+    const deleteButton = buttons.find((b: any) => b.text === 'Delete');
+    deleteButton.onPress();
+
+    expect(mockDeleteBook).toHaveBeenCalledWith('1');
+  });
 });

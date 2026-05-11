@@ -6,9 +6,8 @@ import { router } from 'expo-router';
 import { useLibrary } from '../src/hooks/useLibrary';
 import { Book } from '../src/types';
 
-function BookRow({ book, onPress }: { book: Book; onPress: () => void }) {
+function BookRow({ book, onPress, onDelete }: { book: Book; onPress: () => void; onDelete: () => void }) {
   const swipeableRef = useRef<Swipeable>(null);
-  const { deleteBook } = useLibrary();
 
   function handleDelete() {
     Alert.alert(
@@ -25,7 +24,7 @@ function BookRow({ book, onPress }: { book: Book; onPress: () => void }) {
           style: 'destructive',
           onPress: () => {
             swipeableRef.current?.close();
-            deleteBook(book.id);
+            void onDelete();
           },
         },
       ]
@@ -51,7 +50,7 @@ function BookRow({ book, onPress }: { book: Book; onPress: () => void }) {
 }
 
 export default function LibraryScreen() {
-  const { books, importBook } = useLibrary();
+  const { books, importBook, deleteBook } = useLibrary();
 
   function handleBookPress(book: Book) {
     router.push({ pathname: '/reader', params: { bookId: book.id, uri: book.path } });
@@ -69,7 +68,7 @@ export default function LibraryScreen() {
           keyExtractor={(item) => item.id}
           contentContainerStyle={{ paddingBottom: 80 }}
           renderItem={({ item }) => (
-            <BookRow book={item} onPress={() => handleBookPress(item)} />
+            <BookRow book={item} onPress={() => handleBookPress(item)} onDelete={() => deleteBook(item.id)} />
           )}
         />
       )}
