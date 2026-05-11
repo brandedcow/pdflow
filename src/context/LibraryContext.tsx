@@ -30,7 +30,7 @@ export function LibraryProvider({ children }: { children: React.ReactNode }) {
       const extractionResult = await extractPdf(book.path);
       const bookId = extractionResult.book_id;
       const finalPath = `${destDir}${bookId}-${book.filename}`;
-      new FSFile(book.path).move(new FSFile(finalPath));
+      await new FSFile(book.path).move(new FSFile(finalPath));
       const extractionStatus: ExtractionStatus =
         extractionResult.status === 'failed' ? 'failed' : 'ready';
       const finalBook: Book = {
@@ -91,7 +91,7 @@ export function LibraryProvider({ children }: { children: React.ReactNode }) {
 
   async function retryExtraction(bookId: string): Promise<void> {
     const book = books.find((b) => b.id === bookId);
-    if (!book || book.extractionStatus === 'pending') return;
+    if (!book || book.extractionStatus !== 'failed') return;
 
     const pendingBook: Book = { ...book, extractionStatus: 'pending' };
     await replaceBook(bookId, pendingBook);
