@@ -18,6 +18,7 @@ jest.mock('expo-file-system/legacy', () => ({
   copyAsync: jest.fn().mockResolvedValue(undefined),
   makeDirectoryAsync: jest.fn().mockResolvedValue(undefined),
   moveAsync: jest.fn().mockResolvedValue(undefined),
+  deleteAsync: jest.fn().mockResolvedValue(undefined),
 }));
 jest.mock('expo-crypto', () => ({
   randomUUID: jest.fn().mockReturnValue('mock-pending-uuid'),
@@ -137,5 +138,59 @@ describe('LibraryContext', () => {
 
     expect(alertSpy).toHaveBeenCalledWith('Import failed', "Couldn't import file");
     expect(result.current.books).toHaveLength(0);
+  });
+
+  describe('deleteBook', () => {
+    const storedBook = {
+      id: 'stored-id',
+      filename: 'stored.pdf',
+      path: '/mock/documents/pdfs/stored.pdf',
+      addedAt: '2026-05-09T00:00:00.000Z',
+      extractionStatus: 'ready' as const,
+    };
+
+    it('removes the book from state and storage', async () => {
+      await AsyncStorage.setItem('pdflow_books', JSON.stringify([storedBook]));
+      const { result } = renderHook(() => useLibrary(), { wrapper });
+      await act(async () => {});
+
+      await act(async () => {
+        await result.current.deleteBook('stored-id');
+      });
+
+      expect(result.current.books).toHaveLength(0);
+      expect(FileSystem.deleteAsync).toHaveBeenCalledWith(
+        '/mock/documents/pdfs/stored.pdf',
+        { idempotent: true }
+      );
+    });
+
+    it('shows alert and does not remove book if filesystem delete throws', async () => {
+      const alertSpy = jest.spyOn(Alert, 'alert');
+      (FileSystem.deleteAsync as jest.Mock).mockRejectedValue(new Error('Permission denied'));
+      await AsyncStorage.setItem('pdflow_books', JSON.stringify([storedBook]));
+
+      const { result } = renderHook(() => useLibrary(), { wrapper });
+      await act(async () => {});
+
+      await act(async () => {
+        await result.current.deleteBook('stored-id');
+      });
+
+      expect(alertSpy).toHaveBeenCalledWith('Delete failed', "Couldn't delete the book");
+      expect(result.current.books).toHaveLength(1);
+    });
+
+    it('does nothing if book id is not found', async () => {
+      const { result } = renderHook(() => useLibrary(), { wrapper });
+      await act(async () => {});
+
+      await act(async () => {
+        await result.current.deleteBook('non-existent-id');
+      });
+
+      expect(FileSystem.deleteAsync).not.toHaveBeenCalled();
+      expect(result.current.books).toHaveLength(0);
+    });
   });
 });

@@ -4,12 +4,13 @@ import * as DocumentPicker from 'expo-document-picker';
 import * as FileSystem from 'expo-file-system/legacy';
 import * as Crypto from 'expo-crypto';
 import { Book, ExtractionStatus } from '../types';
-import { loadBooks, saveBook, replaceBook } from '../storage/storage';
+import { loadBooks, saveBook, replaceBook, deleteBook as storageDeleteBook } from '../storage/storage';
 import { extractPdf } from '../api/extractionApi';
 
 type LibraryContextType = {
   books: Book[];
   importBook: () => Promise<void>;
+  deleteBook: (id: string) => Promise<void>;
 };
 
 export const LibraryContext = createContext<LibraryContextType | null>(null);
@@ -80,8 +81,21 @@ export function LibraryProvider({ children }: { children: React.ReactNode }) {
     }
   }
 
+  async function deleteBook(id: string): Promise<void> {
+    const book = books.find((b) => b.id === id);
+    if (!book) return;
+    try {
+      await FileSystem.deleteAsync(book.path, { idempotent: true });
+    } catch {
+      Alert.alert('Delete failed', "Couldn't delete the book");
+      return;
+    }
+    await storageDeleteBook(id);
+    setBooks((prev) => prev.filter((b) => b.id !== id));
+  }
+
   return (
-    <LibraryContext.Provider value={{ books, importBook }}>
+    <LibraryContext.Provider value={{ books, importBook, deleteBook }}>
       {children}
     </LibraryContext.Provider>
   );
