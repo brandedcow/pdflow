@@ -21,6 +21,7 @@ describe('extractPdf', () => {
       ok: true,
       json: async () => mockResult,
     });
+    const appendSpy = jest.spyOn(FormData.prototype, 'append');
 
     const result = await extractPdf('/documents/pdfs/test.pdf');
 
@@ -28,9 +29,11 @@ describe('extractPdf', () => {
       'http://localhost:8000/extract',
       expect.objectContaining({ method: 'POST' })
     );
+    expect(appendSpy).toHaveBeenCalledWith('pdf_file', expect.anything());
     expect(result.book_id).toBe('backend-uuid-123');
     expect(result.status).toBe('success');
     expect(result.blocks).toHaveLength(1);
+    appendSpy.mockRestore();
   });
 
   it('throws when server returns non-200 status', async () => {
