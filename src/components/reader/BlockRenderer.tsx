@@ -6,10 +6,11 @@ import { ExtractionBlock } from '../../types';
 type Props = {
   block: ExtractionBlock;
   fontSize: number;
+  textColor?: string;
   testID?: string;
 };
 
-export default function BlockRenderer({ block, fontSize, testID }: Props) {
+export default function BlockRenderer({ block, fontSize, textColor, testID }: Props) {
   const lowConfidence = block.confidence < 0.6;
   const containerStyle = [
     styles.container,
@@ -19,7 +20,7 @@ export default function BlockRenderer({ block, fontSize, testID }: Props) {
   if (block.type === 'heading') {
     return (
       <View style={containerStyle} testID={testID}>
-        <Text style={[styles.heading, { fontSize: fontSize + 4 }]}>{block.content}</Text>
+        <Text style={[styles.heading, { fontSize: fontSize + 4, color: textColor ?? '#111' }]}>{block.content}</Text>
       </View>
     );
   }
@@ -36,7 +37,7 @@ export default function BlockRenderer({ block, fontSize, testID }: Props) {
 
   return (
     <View style={containerStyle} testID={testID}>
-      <Text style={[styles.text, { fontSize }]}>{block.content}</Text>
+      <Text style={[styles.text, { fontSize, color: textColor ?? '#111' }]}>{block.content}</Text>
     </View>
   );
 }

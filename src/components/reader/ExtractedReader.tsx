@@ -3,19 +3,24 @@ import { ScrollView, StyleSheet, View } from 'react-native';
 import { ExtractionResult } from '../../types';
 import BlockRenderer from './BlockRenderer';
 import ConfidenceBadge from './ConfidenceBadge';
-import ReaderSettings, { ReaderConfig } from './ReaderSettings';
+import ReaderSettings, { BACKGROUNDS, FONT_SIZES, ReaderConfig } from './ReaderSettings';
 
 type Props = {
   result: ExtractionResult;
 };
 
-const DEFAULT_CONFIG: ReaderConfig = {
-  fontSize: 16,
-  background: { label: 'White', background: '#FFFFFF', text: '#111111' },
-};
+const DEFAULT_BACKGROUND = { label: 'White', background: '#FFFFFF', text: '#111111' };
+const DEFAULT_FONT_SIZE = 16; // M
+
+function getDefaultConfig(): ReaderConfig {
+  return {
+    fontSize: FONT_SIZES?.[1]?.size ?? DEFAULT_FONT_SIZE,
+    background: BACKGROUNDS?.[0] ?? DEFAULT_BACKGROUND,
+  };
+}
 
 export default function ExtractedReader({ result }: Props) {
-  const [config, setConfig] = useState<ReaderConfig>(DEFAULT_CONFIG);
+  const [config, setConfig] = useState<ReaderConfig>(getDefaultConfig);
 
   return (
     <View style={[styles.container, { backgroundColor: config.background.background }]}>
@@ -23,7 +28,7 @@ export default function ExtractedReader({ result }: Props) {
       <ReaderSettings config={config} onChange={setConfig} />
       <ScrollView contentContainerStyle={styles.content}>
         {result.blocks.map((block, index) => (
-          <BlockRenderer key={index} block={block} fontSize={config.fontSize} />
+          <BlockRenderer key={`${block.type}-${index}`} block={block} fontSize={config.fontSize} textColor={config.background.text} />
         ))}
       </ScrollView>
     </View>
