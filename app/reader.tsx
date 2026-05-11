@@ -48,7 +48,8 @@ export default function ReaderScreen() {
           )}
           {(canToggle || isPending) && (
             <TouchableOpacity
-              onPress={canToggle ? handleToggle : undefined}
+              onPress={handleToggle}
+              disabled={!canToggle}
               style={[styles.headerIcon, !canToggle && styles.headerIconDisabled]}
               accessibilityLabel="Toggle view"
             >

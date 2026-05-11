@@ -30,7 +30,9 @@ export function LibraryProvider({ children }: { children: React.ReactNode }) {
       const extractionResult = await extractPdf(book.path);
       const bookId = extractionResult.book_id;
       const finalPath = `${destDir}${bookId}-${book.filename}`;
-      await new FSFile(book.path).move(new FSFile(finalPath));
+      if (finalPath !== book.path) {
+        await new FSFile(book.path).move(new FSFile(finalPath));
+      }
       const extractionStatus: ExtractionStatus =
         extractionResult.status === 'failed' ? 'failed' : 'ready';
       const finalBook: Book = {
