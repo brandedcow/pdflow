@@ -19,6 +19,7 @@ const makeBook = (overrides: Partial<Book> = {}): Book => ({
   filename: 'test.pdf',
   path: '/docs/test.pdf',
   addedAt: '2026-05-09T00:00:00.000Z',
+  extractionStatus: 'ready',
   ...overrides,
 });
 
@@ -55,7 +56,7 @@ describe('LibraryScreen', () => {
     fireEvent.press(getByText('test.pdf'));
     expect(router.push).toHaveBeenCalledWith({
       pathname: '/reader',
-      params: { uri: book.path },
+      params: { bookId: book.id, uri: book.path },
     });
   });
 });

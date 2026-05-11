@@ -9,7 +9,7 @@ export default function LibraryScreen() {
   const { books, importBook } = useLibrary();
 
   function handleBookPress(book: Book) {
-    router.push({ pathname: '/reader', params: { uri: book.path } });
+    router.push({ pathname: '/reader', params: { bookId: book.id, uri: book.path } });
   }
 
   return (

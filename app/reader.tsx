@@ -1,28 +1,15 @@
-import React, { useEffect, useState } from 'react';
+import React from 'react';
 import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { router, useLocalSearchParams } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useLocalSearchParams, router } from 'expo-router';
-import Pdf from 'react-native-pdf';
+import { useLibrary } from '../src/hooks/useLibrary';
+import ReaderContainer from '../src/components/reader/ReaderContainer';
 
 export default function ReaderScreen() {
-  const { uri } = useLocalSearchParams<{ uri: string }>();
-  const [hasError, setHasError] = useState(false);
+  const { bookId, uri } = useLocalSearchParams<{ bookId: string; uri: string }>();
+  const { books } = useLibrary();
   const insets = useSafeAreaInsets();
-
-  useEffect(() => {
-    if (!uri) setHasError(true);
-  }, [uri]);
-
-  if (hasError) {
-    return (
-      <View style={styles.errorContainer}>
-        <Text style={styles.errorText}>Could not open this PDF.</Text>
-        <TouchableOpacity onPress={() => router.back()}>
-          <Text style={styles.backLink}>Go back</Text>
-        </TouchableOpacity>
-      </View>
-    );
-  }
+  const book = books.find((b) => b.id === bookId);
 
   return (
     <View style={styles.container}>
@@ -31,12 +18,7 @@ export default function ReaderScreen() {
           <Text style={styles.backButton}>← Back</Text>
         </TouchableOpacity>
       </View>
-      <Pdf
-        trustAllCerts={false}
-        source={{ uri, cache: false }}
-        onError={() => setHasError(true)}
-        style={styles.pdf}
-      />
+      <ReaderContainer book={book} uri={uri} />
     </View>
   );
 }
@@ -50,8 +32,4 @@ const styles = StyleSheet.create({
     borderBottomColor: '#eee',
   },
   backButton: { fontSize: 16, color: '#111' },
-  pdf: { flex: 1 },
-  errorContainer: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24 },
-  errorText: { fontSize: 16, color: '#333', marginBottom: 16, textAlign: 'center' },
-  backLink: { fontSize: 16, color: '#007AFF' },
 });
