@@ -13,8 +13,25 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Extract Pdf */
-        post: operations["extract_pdf_extract_post"];
+        /** Submit Extraction */
+        post: operations["submit_extraction_extract_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/jobs/{job_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Job */
+        get: operations["get_job_jobs__job_id__get"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -40,35 +57,45 @@ export interface components {
          * @enum {string}
          */
         BlockType: "heading" | "text" | "table";
-        /** Body_extract_pdf_extract_post */
-        Body_extract_pdf_extract_post: {
+        /** Body_submit_extraction_extract_post */
+        Body_submit_extraction_extract_post: {
             /**
              * Pdf File
              * Format: binary
              */
             pdf_file: string;
         };
-        /** ExtractionResponse */
-        ExtractionResponse: {
-            /** Book Id */
-            book_id: string;
-            status: components["schemas"]["ExtractionStatus"];
-            /** Overall Confidence */
-            overall_confidence: number;
-            /** Page Count */
-            page_count: number;
-            /** Blocks */
-            blocks: components["schemas"]["Block"][];
-        };
-        /**
-         * ExtractionStatus
-         * @enum {string}
-         */
-        ExtractionStatus: "success" | "partial" | "failed";
         /** HTTPValidationError */
         HTTPValidationError: {
             /** Detail */
             detail?: components["schemas"]["ValidationError"][];
+        };
+        /**
+         * JobStatus
+         * @enum {string}
+         */
+        JobStatus: "queued" | "processing" | "success" | "partial" | "failed";
+        /** JobStatusResponse */
+        JobStatusResponse: {
+            /** Job Id */
+            job_id: string;
+            status: components["schemas"]["JobStatus"];
+            /** Overall Confidence */
+            overall_confidence?: number | null;
+            /** Page Count */
+            page_count?: number | null;
+            /** Blocks */
+            blocks?: components["schemas"]["Block"][] | null;
+        };
+        /** JobSubmitResponse */
+        JobSubmitResponse: {
+            /** Job Id */
+            job_id: string;
+            /**
+             * Status
+             * @constant
+             */
+            status: "queued";
         };
         /** ValidationError */
         ValidationError: {
@@ -88,7 +115,7 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
-    extract_pdf_extract_post: {
+    submit_extraction_extract_post: {
         parameters: {
             query?: never;
             header?: never;
@@ -97,7 +124,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "multipart/form-data": components["schemas"]["Body_extract_pdf_extract_post"];
+                "multipart/form-data": components["schemas"]["Body_submit_extraction_extract_post"];
             };
         };
         responses: {
@@ -107,7 +134,38 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ExtractionResponse"];
+                    "application/json": components["schemas"]["JobSubmitResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_job_jobs__job_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                job_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["JobStatusResponse"];
                 };
             };
             /** @description Validation Error */

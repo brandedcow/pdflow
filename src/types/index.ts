@@ -1,17 +1,20 @@
 import type { components } from './generated';
 
 export type ExtractionBlock = components['schemas']['Block'];
-export type ExtractionResult = components['schemas']['ExtractionResponse'];
 
-// 'ready' covers both backend 'success' and 'partial' statuses.
-// The confidence badge is driven by ExtractionResult.overall_confidence directly.
+export type ExtractionResult = {
+  overall_confidence: number;
+  page_count: number;
+  blocks: ExtractionBlock[];
+};
+
 export type ExtractionStatus = 'pending' | 'ready' | 'failed';
 
 export type Book = {
   id: string;
   filename: string;
   path: string;
-  addedAt: string; // ISO 8601
+  addedAt: string;
   extractionStatus: ExtractionStatus;
   extractionResult?: ExtractionResult;
 };
