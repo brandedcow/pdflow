@@ -19,6 +19,7 @@ const LABELS = {
 };
 
 let processes = [];
+let cleanedUp = false;
 
 function streamProcess(proc, label, color) {
   let stdoutBuf = '';
@@ -34,6 +35,8 @@ function streamProcess(proc, label, color) {
 
   proc.stdout.on('data', data => { stdoutBuf = flush(stdoutBuf, data.toString()); });
   proc.stderr.on('data', data => { stderrBuf = flush(stderrBuf, data.toString()); });
+  proc.stdout.on('end', () => { if (stdoutBuf) console.log(color(label) + ' ' + stdoutBuf); });
+  proc.stderr.on('end', () => { if (stderrBuf) console.log(color(label) + ' ' + stderrBuf); });
 }
 
 function updateEnv(url) {
@@ -69,6 +72,8 @@ function killProc(proc) {
 }
 
 function cleanup() {
+  if (cleanedUp) return;
+  cleanedUp = true;
   processes.forEach(killProc);
   processes = [];
 }
