@@ -10,7 +10,10 @@ logger = logging.getLogger(__name__)
 @celery_app.task
 def process_pdf(job_id: str, file_path: str) -> dict:
     try:
+        logger.info("Starting job %s for %s", job_id, file_path)
+
         if not Path(file_path).exists():
+            logger.error("File not found: %s", file_path)
             return {
                 "job_id": job_id,
                 "status": "failed",
@@ -19,6 +22,7 @@ def process_pdf(job_id: str, file_path: str) -> dict:
                 "blocks": [],
             }
 
+        logger.info("Extracting %s", job_id)
         try:
             blocks, page_count = extract(file_path)
         except Exception:
@@ -30,8 +34,10 @@ def process_pdf(job_id: str, file_path: str) -> dict:
                 "page_count": 1,
                 "blocks": [],
             }
+        logger.info("Extracted %d blocks across %d pages for %s", len(blocks), page_count, job_id)
 
         if not blocks:
+            logger.warning("No blocks extracted for %s", job_id)
             return {
                 "job_id": job_id,
                 "status": "failed",
@@ -40,6 +46,7 @@ def process_pdf(job_id: str, file_path: str) -> dict:
                 "blocks": [],
             }
 
+        logger.info("Verifying %d blocks for %s", len(blocks), job_id)
         try:
             scored_blocks = verify(blocks)
         except Exception:
@@ -55,6 +62,7 @@ def process_pdf(job_id: str, file_path: str) -> dict:
         overall_confidence = round(
             sum(b.confidence for b in scored_blocks) / len(scored_blocks), 3
         )
+        logger.info("Confidence %.3f for %s", overall_confidence, job_id)
 
         if overall_confidence >= 0.8:
             status = "success"
