@@ -84,7 +84,7 @@ process.on('exit', cleanup);
 function spawnService(cmd, args, cwd, label, color, extraEnv = {}) {
   const proc = spawn(cmd, args, {
     cwd,
-    shell: true,
+    shell: false,
     detached: !isWindows,
     env: { ...process.env, ...extraEnv, PYTHONUNBUFFERED: '1' },
   });
@@ -103,8 +103,9 @@ async function startTunnel() {
     const { label, color } = LABELS.tunnel;
     console.log(color(label) + ' Starting cloudflared tunnel...');
 
-    const proc = spawn('cloudflared', ['tunnel', '--url', 'http://localhost:8000'], {
-      shell: true,
+    const cloudflaredExe = isWindows ? 'cloudflared.exe' : 'cloudflared';
+    const proc = spawn(cloudflaredExe, ['tunnel', '--url', 'http://localhost:8000'], {
+      shell: false,
       detached: !isWindows,
     });
     processes.push(proc);
@@ -161,9 +162,10 @@ async function main() {
     );
 
     // expo must inherit the parent TTY so ink renders the QR code (isTTY=false suppresses it)
-    const expoProc = spawn('npx', ['expo', 'start'], {
+    const npxExe = isWindows ? 'npx.cmd' : 'npx';
+    const expoProc = spawn(npxExe, ['expo', 'start'], {
       cwd: ROOT,
-      shell: true,
+      shell: false,
       stdio: 'inherit',
       env: { ...process.env },
     });
