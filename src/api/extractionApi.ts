@@ -1,37 +1,60 @@
 import Constants from 'expo-constants';
-import type { ExtractionResult } from '../types';
 
-// Production: set EXPO_PUBLIC_BACKEND_URL in .env (baked into bundle at build time).
-// Dev on real device: fall back to Expo's dev server host so the app reaches the
-// dev machine rather than resolving localhost to the device itself.
-// Dev on simulator: localhost works fine as the final fallback.
 const devHost = Constants.expoConfig?.hostUri?.split(':')[0];
 const BACKEND_URL =
   process.env.EXPO_PUBLIC_BACKEND_URL ??
   (devHost ? `http://${devHost}:8000` : 'http://localhost:8000');
 
-
-// React Native's fetch polyfill accepts this shape for file uploads.
-// FormData in RN does not use the browser Blob API.
-type RNFileObject = {
-  uri: string;
-  name: string;
-  type: string;
+export type JobStatusResponse = {
+  job_id: string;
+  status: 'queued' | 'processing' | 'success' | 'partial' | 'failed';
+  overall_confidence?: number;
+  page_count?: number;
+  blocks?: Array<{
+    type: 'heading' | 'text' | 'table';
+    content: string;
+    page: number;
+    confidence: number;
+  }>;
 };
 
-export async function extractPdf(fileUri: string): Promise<ExtractionResult> {
+export async function submitExtraction(fileUri: string): Promise<{ job_id: string }> {
+  console.log(`[ExtractionAPI] Submitting PDF: ${fileUri}`);
   const formData = new FormData();
-  const file: RNFileObject = { uri: fileUri, name: 'upload.pdf', type: 'application/pdf' };
-  formData.append('pdf_file', file as unknown as Blob);
+  // @ts-ignore - FormData.append expects Blob/File but RN accepts this shape
+  formData.append('pdf_file', {
+    uri: fileUri,
+    name: fileUri.split('/').pop() ?? 'upload.pdf',
+    type: 'application/pdf',
+  });
 
   const response = await fetch(`${BACKEND_URL}/extract`, {
     method: 'POST',
     body: formData,
+    headers: {
+      Accept: 'application/json',
+      'Content-Type': 'multipart/form-data',
+    },
   });
 
   if (!response.ok) {
-    throw new Error(`Extraction failed: ${response.status}`);
+    const text = await response.text();
+    throw new Error(`Submit failed: ${response.status} ${text}`);
   }
 
-  return response.json() as Promise<ExtractionResult>;
+  return response.json();
+}
+
+export async function pollJobStatus(jobId: string): Promise<JobStatusResponse> {
+  console.log(`[ExtractionAPI] Polling job: ${jobId}`);
+  const response = await fetch(`${BACKEND_URL}/jobs/${jobId}`, {
+    method: 'GET',
+    headers: { Accept: 'application/json' },
+  });
+
+  if (!response.ok) {
+    throw new Error(`Poll failed: ${response.status}`);
+  }
+
+  return response.json();
 }
