@@ -80,3 +80,96 @@ function cleanup() {
 
 process.on('SIGINT', () => { cleanup(); process.exit(0); });
 process.on('exit', cleanup);
+
+function spawnService(cmd, args, cwd, label, color, extraEnv = {}) {
+  const proc = spawn(cmd, args, {
+    cwd,
+    shell: true,
+    detached: !isWindows,
+    env: { ...process.env, ...extraEnv, PYTHONUNBUFFERED: '1' },
+  });
+  streamProcess(proc, label, color);
+  proc.on('exit', code => {
+    if (code !== 0 && code !== null) {
+      console.log(chalk.red(label + ' exited with code ' + code));
+    }
+  });
+  processes.push(proc);
+  return proc;
+}
+
+async function startTunnel() {
+  return new Promise((resolve, reject) => {
+    const { label, color } = LABELS.tunnel;
+    console.log(color(label) + ' Starting cloudflared tunnel...');
+
+    const proc = spawn('cloudflared', ['tunnel', '--url', 'http://localhost:8000'], {
+      shell: true,
+      detached: !isWindows,
+    });
+    processes.push(proc);
+
+    const timer = setTimeout(() => {
+      reject(new Error('Tunnel URL not found within 30s. Is cloudflared installed and in PATH?'));
+    }, TUNNEL_TIMEOUT_MS);
+
+    let resolved = false;
+
+    function onData(data) {
+      const text = data.toString();
+      text.split('\n').forEach(line => { if (line) console.log(color(label) + ' ' + line); });
+      const match = text.match(/https:\/\/[a-z0-9-]+\.trycloudflare\.com/);
+      if (match && !resolved) {
+        resolved = true;
+        clearTimeout(timer);
+        resolve({ url: match[0], proc });
+      }
+    }
+
+    proc.stderr.on('data', onData);
+    proc.stdout.on('data', onData);
+
+    proc.on('exit', code => {
+      if (!resolved) {
+        clearTimeout(timer);
+        reject(new Error('cloudflared exited with code ' + code + ' before URL was found'));
+      }
+    });
+
+    proc.on('error', err => {
+      if (!resolved) { clearTimeout(timer); reject(err); }
+    });
+  });
+}
+
+async function main() {
+  try {
+    const { url } = await startTunnel();
+    updateEnv(url);
+
+    const uvicorn = path.join(BACKEND_DIR, '.venv', venvBin, isWindows ? 'uvicorn.exe' : 'uvicorn');
+    const celery  = path.join(BACKEND_DIR, '.venv', venvBin, isWindows ? 'celery.exe' : 'celery');
+
+    spawnService(
+      uvicorn, ['main:app', '--reload'], BACKEND_DIR,
+      LABELS.backend.label, LABELS.backend.color, { PYTHONPATH: BACKEND_DIR }
+    );
+
+    spawnService(
+      celery, ['-A', 'jobs.celery_app', 'worker', '--loglevel=info'], BACKEND_DIR,
+      LABELS.worker.label, LABELS.worker.color, { PYTHONPATH: BACKEND_DIR }
+    );
+
+    spawnService(
+      'npx', ['expo', 'start'], ROOT,
+      LABELS.expo.label, LABELS.expo.color
+    );
+
+  } catch (err) {
+    console.error(chalk.red('[dev] ' + err.message));
+    cleanup();
+    process.exit(1);
+  }
+}
+
+main();
