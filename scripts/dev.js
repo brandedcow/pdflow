@@ -156,8 +156,10 @@ async function main() {
       LABELS.backend.label, LABELS.backend.color, { PYTHONPATH: BACKEND_DIR }
     );
 
+    const celeryArgs = ['-A', 'jobs.celery_app', 'worker', '--loglevel=info'];
+    if (isWindows) celeryArgs.push('--pool=solo');
     spawnService(
-      celery, ['-A', 'jobs.celery_app', 'worker', '--loglevel=info'], BACKEND_DIR,
+      celery, celeryArgs, BACKEND_DIR,
       LABELS.worker.label, LABELS.worker.color, { PYTHONPATH: BACKEND_DIR }
     );
 
