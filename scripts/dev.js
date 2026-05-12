@@ -38,7 +38,25 @@ const footer = grid.set(11, 0, 1, 12, blessed.text, {
   style: { fg: 'black', bg: 'white' }
 });
 
-const processes = [];
+let processes = [];
+
+function cleanup() {
+    processes.forEach(p => {
+        if (p && p.pid) {
+            if (process.platform === 'win32') {
+                spawn('taskkill', ['/F', '/T', '/PID', p.pid.toString()], { stdio: 'ignore' });
+            } else {
+                try { process.kill(-p.pid); } catch (e) { p.kill(); }
+            }
+        }
+    });
+}
+
+process.on('exit', cleanup);
+process.on('SIGINT', () => {
+    cleanup();
+    process.exit();
+});
 
 function updateEnv(url) {
     const ENV_PATH = path.join(__dirname, '..', '.env.local');
@@ -68,10 +86,13 @@ async function startTunnel() {
         };
         tunnel.on('exit', exitHandler);
 
+        let resolved = false;
         tunnel.stderr.on('data', (data) => {
             const output = data.toString();
+            backendLog.log(output);
             const match = output.match(/https:\/\/[a-z0-9-]+\.trycloudflare\.com/);
-            if (match) {
+            if (match && !resolved) {
+                resolved = true;
                 tunnel.removeListener('exit', exitHandler);
                 resolve({ url: match[0], proc: tunnel });
             }
@@ -91,14 +112,49 @@ function startService(command, args, cwd, logPane, env = {}) {
     });
     
     proc.stdout.on('data', (data) => {
-        logPane.log(data.toString().trim());
+        logPane.log(data.toString());
     });
     
     proc.stderr.on('data', (data) => {
-        logPane.log(`{red-fg}${data.toString().trim()}{/red-fg}`);
+        logPane.log(`{red-fg}${data.toString()}{/red-fg}`);
     });
 
     return proc;
+}
+
+let backendProc, workerProc, expoProc;
+let uvicornPath, celeryPath, backendCwd, rootCwd;
+
+function restartBackend() {
+    backendLog.log('{yellow-fg}Restarting Backend and Worker...{/yellow-fg}');
+    
+    if (backendProc) {
+        if (process.platform === 'win32') {
+            spawn('taskkill', ['/F', '/T', '/PID', backendProc.pid.toString()], { stdio: 'ignore' });
+        } else {
+            backendProc.kill();
+        }
+        processes = processes.filter(p => p !== backendProc);
+    }
+    
+    if (workerProc) {
+        if (process.platform === 'win32') {
+            spawn('taskkill', ['/F', '/T', '/PID', workerProc.pid.toString()], { stdio: 'ignore' });
+        } else {
+            workerProc.kill();
+        }
+        processes = processes.filter(p => p !== workerProc);
+    }
+
+    backendProc = startService(uvicornPath, ['main:app', '--reload'], backendCwd, backendLog, {
+        PYTHONPATH: backendCwd
+    });
+    processes.push(backendProc);
+
+    workerProc = startService(celeryPath, ['-A', 'jobs.celery_app', 'worker', '--loglevel=info'], backendCwd, workerLog, {
+        PYTHONPATH: backendCwd
+    });
+    processes.push(workerProc);
 }
 
 async function main() {
@@ -110,29 +166,32 @@ async function main() {
     updateEnv(url);
     backendLog.log('{green-fg}.env.local updated with tunnel URL{/green-fg}');
     
-    footer.setContent(` q: Quit | r: Restart | Tunnel: ${url}`);
+    footer.setContent(` q: Quit | r: Restart | s: Clear | Tunnel: ${url}`);
     screen.render();
 
     const isWindows = process.platform === 'win32';
     const venvBin = isWindows ? 'Scripts' : 'bin';
-    const backendCwd = path.join(__dirname, '..', 'backend');
-    const rootCwd = path.join(__dirname, '..');
+    backendCwd = path.join(__dirname, '..', 'backend');
+    rootCwd = path.join(__dirname, '..');
     
-    const uvicornPath = path.join(backendCwd, '.venv', venvBin, 'uvicorn');
-    const celeryPath = path.join(backendCwd, '.venv', venvBin, 'celery');
+    uvicornPath = path.join(backendCwd, '.venv', venvBin, isWindows ? 'uvicorn.exe' : 'uvicorn');
+    celeryPath = path.join(backendCwd, '.venv', venvBin, isWindows ? 'celery.exe' : 'celery');
 
     backendLog.log('{cyan-fg}Starting Backend...{/cyan-fg}');
-    processes.push(startService(uvicornPath, ['main:app', '--reload'], backendCwd, backendLog, {
+    backendProc = startService(uvicornPath, ['main:app', '--reload'], backendCwd, backendLog, {
         PYTHONPATH: backendCwd
-    }));
+    });
+    processes.push(backendProc);
 
     workerLog.log('{cyan-fg}Starting Worker...{/cyan-fg}');
-    processes.push(startService(celeryPath, ['-A', 'jobs.celery_app', 'worker', '--loglevel=info'], backendCwd, workerLog, {
+    workerProc = startService(celeryPath, ['-A', 'jobs.celery_app', 'worker', '--loglevel=info'], backendCwd, workerLog, {
         PYTHONPATH: backendCwd
-    }));
+    });
+    processes.push(workerProc);
 
     expoLog.log('{cyan-fg}Starting Expo...{/cyan-fg}');
-    processes.push(startService('npx', ['expo', 'start'], rootCwd, expoLog));
+    expoProc = startService('npx', ['expo', 'start'], rootCwd, expoLog);
+    processes.push(expoProc);
 
   } catch (err) {
     backendLog.log(`{red-fg}Error: ${err.message}{/red-fg}`);
@@ -144,10 +203,19 @@ async function main() {
 }
 
 screen.key(['q', 'C-c'], () => {
-    processes.forEach(p => {
-        try { p.kill(); } catch (e) {}
-    });
+    cleanup();
     process.exit(0);
+});
+
+screen.key(['r'], () => {
+    restartBackend();
+});
+
+screen.key(['s'], () => {
+    expoLog.setContent('');
+    backendLog.setContent('');
+    workerLog.setContent('');
+    screen.render();
 });
 
 screen.render();
