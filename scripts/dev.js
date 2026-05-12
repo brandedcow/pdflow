@@ -34,8 +34,63 @@ const workerLog = grid.set(5, 7, 6, 5, blessed.log, {
 });
 
 const footer = grid.set(11, 0, 1, 12, blessed.text, {
-  content: ' q: Quit | r: Restart Backend | s: Clear Logs',
+  content: ' q: Quit | r: Restart | s: Clear | Tab: Cycle Focus | Arrows: Scroll',
   style: { fg: 'black', bg: 'white' }
+});
+
+let focusedPane = expoLog;
+const panes = [expoLog, backendLog, workerLog];
+
+function setFocus(pane) {
+    panes.forEach(p => {
+        p.style.border.fg = 'default';
+        p.style.label.fg = 'default';
+    });
+    pane.style.border.fg = 'cyan';
+    pane.style.label.fg = 'cyan';
+    focusedPane = pane;
+    screen.render();
+}
+
+// Initial focus
+setFocus(expoLog);
+
+// Tab to cycle focus
+screen.key(['tab'], () => {
+    const idx = panes.indexOf(focusedPane);
+    setFocus(panes[(idx + 1) % panes.length]);
+});
+
+// Scrolling keys
+screen.key(['up', 'k'], () => {
+    focusedPane.scroll(-1);
+    screen.render();
+});
+screen.key(['down', 'j'], () => {
+    focusedPane.scroll(1);
+    screen.render();
+});
+screen.key(['pageup'], () => {
+    focusedPane.scroll(-(focusedPane.height - 2));
+    screen.render();
+});
+screen.key(['pagedown'], () => {
+    focusedPane.scroll(focusedPane.height - 2);
+    screen.render();
+});
+
+// Mouse support
+screen.enableMouse();
+panes.forEach(pane => {
+    pane.on('click', () => setFocus(pane));
+    pane.on('element wheeldown', () => {
+        pane.scroll(1);
+        screen.render();
+    });
+    pane.on('element wheelup', () => {
+        pane.scroll(-1);
+        screen.render();
+    });
 });
 
 let processes = [];
@@ -44,9 +99,14 @@ function cleanup() {
     processes.forEach(p => {
         if (p && p.pid) {
             if (process.platform === 'win32') {
-                spawn('taskkill', ['/F', '/T', '/PID', p.pid.toString()], { stdio: 'ignore' });
+                try {
+                    const { spawnSync } = require('child_process');
+                    spawnSync('taskkill', ['/F', '/T', '/PID', p.pid.toString()], { stdio: 'ignore' });
+                } catch (e) {}
             } else {
-                try { process.kill(-p.pid); } catch (e) { p.kill(); }
+                try { process.kill(-p.pid, 'SIGKILL'); } catch (e) { 
+                    try { p.kill('SIGKILL'); } catch (err) {}
+                }
             }
         }
     });
@@ -79,7 +139,10 @@ function updateEnv(url) {
 async function startTunnel() {
     return new Promise((resolve, reject) => {
         backendLog.log('{cyan-fg}Starting cloudflared tunnel...{/cyan-fg}');
-        const tunnel = spawn('cloudflared', ['tunnel', '--url', 'http://localhost:8000'], { shell: true });
+        const tunnel = spawn('cloudflared', ['tunnel', '--url', 'http://localhost:8000'], { 
+            shell: true,
+            detached: process.platform !== 'win32'
+        });
         
         const exitHandler = (code) => {
             reject(new Error(`Cloudflared exited with code ${code} before finding URL`));
@@ -108,6 +171,7 @@ function startService(command, args, cwd, logPane, env = {}) {
     const proc = spawn(command, args, { 
         cwd, 
         shell: true, 
+        detached: process.platform !== 'win32',
         env: { ...process.env, ...env, PYTHONUNBUFFERED: '1' } 
     });
     
@@ -128,23 +192,20 @@ let uvicornPath, celeryPath, backendCwd, rootCwd;
 function restartBackend() {
     backendLog.log('{yellow-fg}Restarting Backend and Worker...{/yellow-fg}');
     
-    if (backendProc) {
-        if (process.platform === 'win32') {
-            spawn('taskkill', ['/F', '/T', '/PID', backendProc.pid.toString()], { stdio: 'ignore' });
-        } else {
-            backendProc.kill();
+    [backendProc, workerProc].forEach(proc => {
+        if (proc && proc.pid) {
+            if (process.platform === 'win32') {
+                try {
+                    require('child_process').spawnSync('taskkill', ['/F', '/T', '/PID', proc.pid.toString()], { stdio: 'ignore' });
+                } catch (e) {}
+            } else {
+                try { process.kill(-proc.pid, 'SIGKILL'); } catch (e) { 
+                    try { proc.kill('SIGKILL'); } catch (err) {}
+                }
+            }
+            processes = processes.filter(p => p !== proc);
         }
-        processes = processes.filter(p => p !== backendProc);
-    }
-    
-    if (workerProc) {
-        if (process.platform === 'win32') {
-            spawn('taskkill', ['/F', '/T', '/PID', workerProc.pid.toString()], { stdio: 'ignore' });
-        } else {
-            workerProc.kill();
-        }
-        processes = processes.filter(p => p !== workerProc);
-    }
+    });
 
     backendProc = startService(uvicornPath, ['main:app', '--reload'], backendCwd, backendLog, {
         PYTHONPATH: backendCwd
@@ -166,7 +227,7 @@ async function main() {
     updateEnv(url);
     backendLog.log('{green-fg}.env.local updated with tunnel URL{/green-fg}');
     
-    footer.setContent(` q: Quit | r: Restart | s: Clear | Tunnel: ${url}`);
+    footer.setContent(` q: Quit | r: Restart | s: Clear | Tab: Cycle Focus | Arrows: Scroll | Tunnel: ${url}`);
     screen.render();
 
     const isWindows = process.platform === 'win32';
