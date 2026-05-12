@@ -160,10 +160,19 @@ async function main() {
       LABELS.worker.label, LABELS.worker.color, { PYTHONPATH: BACKEND_DIR }
     );
 
-    spawnService(
-      'npx', ['expo', 'start'], ROOT,
-      LABELS.expo.label, LABELS.expo.color
-    );
+    // expo must inherit the parent TTY so ink renders the QR code (isTTY=false suppresses it)
+    const expoProc = spawn('npx', ['expo', 'start'], {
+      cwd: ROOT,
+      shell: true,
+      stdio: 'inherit',
+      env: { ...process.env },
+    });
+    expoProc.on('exit', code => {
+      if (code !== 0 && code !== null) {
+        console.log(chalk.red('[expo] exited with code ' + code));
+      }
+    });
+    processes.push(expoProc);
 
   } catch (err) {
     console.error(chalk.red('[dev] ' + err.message));
