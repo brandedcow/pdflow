@@ -80,8 +80,13 @@ async def submit_extraction(pdf_file: UploadFile = File(...)) -> JobSubmitRespon
         logger.error("Failed to write upload for %s: %s", job_id, e)
         raise HTTPException(status_code=500, detail="Failed to save uploaded file") from e
 
+    try:
+        process_pdf.apply_async(args=[job_id, file_path], task_id=job_id)
+    except Exception as e:
+        logger.error("Failed to queue task for %s: %s", job_id, e)
+        Path(file_path).unlink(missing_ok=True)
+        raise HTTPException(status_code=500, detail="Failed to queue extraction job") from e
     register_job(job_id)
-    process_pdf.apply_async(args=[job_id, file_path], task_id=job_id)
 
     return JobSubmitResponse(job_id=job_id, status="queued")
 

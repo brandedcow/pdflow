@@ -33,7 +33,7 @@ export async function submitExtraction(fileUri: string): Promise<{ job_id: strin
     body: formData,
     headers: {
       Accept: 'application/json',
-      'Content-Type': 'multipart/form-data',
+      // Do NOT set Content-Type — RN's fetch auto-sets multipart/form-data with boundary
     },
   });
 

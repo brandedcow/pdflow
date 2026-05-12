@@ -40,7 +40,18 @@ def process_pdf(job_id: str, file_path: str) -> dict:
                 "blocks": [],
             }
 
-        scored_blocks = verify(blocks)
+        try:
+            scored_blocks = verify(blocks)
+        except Exception:
+            logger.error("Verification failed for %s", job_id, exc_info=True)
+            return {
+                "job_id": job_id,
+                "status": "failed",
+                "overall_confidence": 0.0,
+                "page_count": page_count,
+                "blocks": [],
+            }
+
         overall_confidence = round(
             sum(b.confidence for b in scored_blocks) / len(scored_blocks), 3
         )
