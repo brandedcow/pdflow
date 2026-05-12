@@ -7,7 +7,7 @@ import { File as FSFile } from 'expo-file-system';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { LibraryProvider } from '../src/context/LibraryContext';
 import { useLibrary } from '../src/hooks/useLibrary';
-import { extractPdf } from '../src/api/extractionApi';
+import { submitExtraction, pollJobStatus } from '../src/api/extractionApi';
 import { ExtractionResult } from '../src/types';
 
 jest.mock('@react-native-async-storage/async-storage', () =>
@@ -28,8 +28,6 @@ jest.mock('expo-crypto', () => ({
 jest.mock('../src/api/extractionApi');
 
 const mockExtractionResult: ExtractionResult = {
-  book_id: 'backend-book-uuid',
-  status: 'success',
   overall_confidence: 0.92,
   page_count: 3,
   blocks: [{ type: 'text', content: 'Hello', page: 1, confidence: 0.92 }],
@@ -45,8 +43,8 @@ describe('LibraryContext', () => {
   beforeEach(async () => {
     await AsyncStorage.clear();
     jest.clearAllMocks();
-    mockFileInstance = { exists: true, delete: jest.fn(), move: jest.fn() };
-    (FSFile as jest.Mock).mockImplementation(() => mockFileInstance);
+    mockFileInstance = { exists: true, delete: jest.fn(), move: jest.fn().mockResolvedValue(undefined) };
+    (FSFile as unknown as jest.Mock).mockImplementation(() => mockFileInstance);
   });
 
   it('starts with an empty book list', async () => {
@@ -79,37 +77,67 @@ describe('LibraryContext', () => {
     expect(FileSystem.copyAsync).not.toHaveBeenCalled();
   });
 
-  it('importBook adds book with pending status immediately then updates to ready', async () => {
+  it('importBook adds book with pending status immediately then starts polling', async () => {
+    jest.useFakeTimers();
     (DocumentPicker.getDocumentAsync as jest.Mock).mockResolvedValue({
       canceled: false,
       assets: [{ uri: '/tmp/test.pdf', name: 'test.pdf' }],
     });
-    (extractPdf as jest.Mock).mockResolvedValue(mockExtractionResult);
+    (submitExtraction as jest.Mock).mockResolvedValue({ job_id: 'backend-book-id' });
+    (pollJobStatus as jest.Mock).mockResolvedValue({
+      job_id: 'backend-book-id',
+      status: 'success',
+      overall_confidence: 0.9,
+      page_count: 2,
+      blocks: [],
+    });
 
     const { result } = renderHook(() => useLibrary(), { wrapper });
     await act(async () => {
       await result.current.importBook();
     });
 
+    // After submitExtraction, book id is updated to job_id and polling starts
     expect(result.current.books).toHaveLength(1);
-    expect(result.current.books[0].id).toBe('backend-book-uuid');
+    expect(result.current.books[0].id).toBe('backend-book-id');
+    expect(result.current.books[0].extractionStatus).toBe('pending');
+
+    // Trigger the poll interval
+    await act(async () => {
+      await jest.advanceTimersByTimeAsync(60_000);
+    });
+
     expect(result.current.books[0].extractionStatus).toBe('ready');
-    expect(result.current.books[0].extractionResult).toEqual(mockExtractionResult);
+    expect(result.current.books[0].extractionResult).toEqual({
+      overall_confidence: 0.9,
+      page_count: 2,
+      blocks: [],
+    });
+    jest.useRealTimers();
   });
 
-  it('importBook uses backend book_id as final Book.id', async () => {
+  it('importBook uses backend job_id as final Book.id', async () => {
+    jest.useFakeTimers();
     (DocumentPicker.getDocumentAsync as jest.Mock).mockResolvedValue({
       canceled: false,
       assets: [{ uri: '/tmp/test.pdf', name: 'test.pdf' }],
     });
-    (extractPdf as jest.Mock).mockResolvedValue(mockExtractionResult);
+    (submitExtraction as jest.Mock).mockResolvedValue({ job_id: 'backend-book-id' });
+    (pollJobStatus as jest.Mock).mockResolvedValue({
+      job_id: 'backend-book-id',
+      status: 'success',
+      overall_confidence: 0.9,
+      page_count: 2,
+      blocks: [],
+    });
 
     const { result } = renderHook(() => useLibrary(), { wrapper });
     await act(async () => {
       await result.current.importBook();
     });
 
-    expect(result.current.books[0].id).toBe('backend-book-uuid');
+    expect(result.current.books[0].id).toBe('backend-book-id');
+    jest.useRealTimers();
   });
 
   it('importBook sets extractionStatus to failed when backend is offline', async () => {
@@ -117,7 +145,7 @@ describe('LibraryContext', () => {
       canceled: false,
       assets: [{ uri: '/tmp/test.pdf', name: 'test.pdf' }],
     });
-    (extractPdf as jest.Mock).mockRejectedValue(new Error('Network request failed'));
+    (submitExtraction as jest.Mock).mockRejectedValue(new Error('Network request failed'));
 
     const { result } = renderHook(() => useLibrary(), { wrapper });
     await act(async () => {
@@ -241,8 +269,16 @@ describe('LibraryContext', () => {
     };
 
     it('sets status to pending then ready on success', async () => {
+      jest.useFakeTimers();
       await AsyncStorage.setItem('pdflow_books', JSON.stringify([failedBook]));
-      (extractPdf as jest.Mock).mockResolvedValue(mockExtractionResult);
+      (submitExtraction as jest.Mock).mockResolvedValue({ job_id: 'backend-book-id' });
+      (pollJobStatus as jest.Mock).mockResolvedValue({
+        job_id: 'backend-book-id',
+        status: 'success',
+        overall_confidence: 0.9,
+        page_count: 2,
+        blocks: [],
+      });
 
       const { result } = renderHook(() => useLibrary(), { wrapper });
       await act(async () => {});
@@ -251,14 +287,22 @@ describe('LibraryContext', () => {
         await result.current.retryExtraction('failed-id');
       });
 
-      expect(result.current.books[0].id).toBe('backend-book-uuid');
+      // After submitExtraction, book has job_id and is pending
+      expect(result.current.books[0].id).toBe('backend-book-id');
+      expect(result.current.books[0].extractionStatus).toBe('pending');
+
+      // Trigger poll
+      await act(async () => {
+        await jest.advanceTimersByTimeAsync(60_000);
+      });
+
       expect(result.current.books[0].extractionStatus).toBe('ready');
-      expect(result.current.books[0].extractionResult).toEqual(mockExtractionResult);
+      jest.useRealTimers();
     });
 
     it('sets status back to failed when extraction throws', async () => {
       await AsyncStorage.setItem('pdflow_books', JSON.stringify([failedBook]));
-      (extractPdf as jest.Mock).mockRejectedValue(new Error('Network error'));
+      (submitExtraction as jest.Mock).mockRejectedValue(new Error('Network error'));
 
       const { result } = renderHook(() => useLibrary(), { wrapper });
       await act(async () => {});
@@ -281,7 +325,7 @@ describe('LibraryContext', () => {
         await result.current.retryExtraction('pending-id');
       });
 
-      expect(extractPdf).not.toHaveBeenCalled();
+      expect(submitExtraction).not.toHaveBeenCalled();
       expect(result.current.books[0].extractionStatus).toBe('pending');
     });
 
@@ -293,7 +337,7 @@ describe('LibraryContext', () => {
         await result.current.retryExtraction('nonexistent-id');
       });
 
-      expect(extractPdf).not.toHaveBeenCalled();
+      expect(submitExtraction).not.toHaveBeenCalled();
     });
   });
 });
