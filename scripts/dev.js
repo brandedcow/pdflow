@@ -38,6 +38,8 @@ const footer = grid.set(11, 0, 1, 12, blessed.text, {
   style: { fg: 'black', bg: 'white' }
 });
 
+const processes = [];
+
 function updateEnv(url) {
     const ENV_PATH = path.join(__dirname, '..', '.env.local');
     let content = '';
@@ -47,8 +49,9 @@ function updateEnv(url) {
     }
     
     const key = 'EXPO_PUBLIC_EXTRACTION_API_URL';
-    if (content.includes(key)) {
-        content = content.replace(new RegExp(`${key}=.*`), `${key}=${url}`);
+    const regex = new RegExp(`^${key}=.*`, 'm');
+    if (regex.test(content)) {
+        content = content.replace(regex, `${key}=${url}`);
     } else {
         content += `\n${key}=${url}\n`;
     }
@@ -60,13 +63,16 @@ async function startTunnel() {
         backendLog.log('{cyan-fg}Starting cloudflared tunnel...{/cyan-fg}');
         const tunnel = spawn('cloudflared', ['tunnel', '--url', 'http://localhost:8000'], { shell: true });
         
+        const exitHandler = (code) => {
+            reject(new Error(`Cloudflared exited with code ${code} before finding URL`));
+        };
+        tunnel.on('exit', exitHandler);
+
         tunnel.stderr.on('data', (data) => {
             const output = data.toString();
-            // Optional: log tunnel stderr to backend log for debugging
-            // backendLog.log(output);
-            
             const match = output.match(/https:\/\/[a-z0-9-]+\.trycloudflare\.com/);
             if (match) {
+                tunnel.removeListener('exit', exitHandler);
                 resolve({ url: match[0], proc: tunnel });
             }
         });
@@ -77,22 +83,56 @@ async function startTunnel() {
     });
 }
 
+function startService(command, args, cwd, logPane, env = {}) {
+    const proc = spawn(command, args, { 
+        cwd, 
+        shell: true, 
+        env: { ...process.env, ...env, PYTHONUNBUFFERED: '1' } 
+    });
+    
+    proc.stdout.on('data', (data) => {
+        logPane.log(data.toString().trim());
+    });
+    
+    proc.stderr.on('data', (data) => {
+        logPane.log(`{red-fg}${data.toString().trim()}{/red-fg}`);
+    });
+
+    return proc;
+}
+
 async function main() {
   try {
-    const { url, proc } = await startTunnel();
+    const { url, proc: tunnelProc } = await startTunnel();
+    processes.push(tunnelProc);
     backendLog.log(`{green-fg}Tunnel active: ${url}{/green-fg}`);
     
     updateEnv(url);
     backendLog.log('{green-fg}.env.local updated with tunnel URL{/green-fg}');
     
-    // Log success to footer or a specific pane
     footer.setContent(` q: Quit | r: Restart | Tunnel: ${url}`);
     screen.render();
 
-    // Here we would typically start the other processes
-    // startBackend();
-    // startWorker();
-    // startExpo();
+    const isWindows = process.platform === 'win32';
+    const venvBin = isWindows ? 'Scripts' : 'bin';
+    const backendCwd = path.join(__dirname, '..', 'backend');
+    const rootCwd = path.join(__dirname, '..');
+    
+    const uvicornPath = path.join(backendCwd, '.venv', venvBin, 'uvicorn');
+    const celeryPath = path.join(backendCwd, '.venv', venvBin, 'celery');
+
+    backendLog.log('{cyan-fg}Starting Backend...{/cyan-fg}');
+    processes.push(startService(uvicornPath, ['main:app', '--reload'], backendCwd, backendLog, {
+        PYTHONPATH: backendCwd
+    }));
+
+    workerLog.log('{cyan-fg}Starting Worker...{/cyan-fg}');
+    processes.push(startService(celeryPath, ['-A', 'jobs.celery_app', 'worker', '--loglevel=info'], backendCwd, workerLog, {
+        PYTHONPATH: backendCwd
+    }));
+
+    expoLog.log('{cyan-fg}Starting Expo...{/cyan-fg}');
+    processes.push(startService('npx', ['expo', 'start'], rootCwd, expoLog));
 
   } catch (err) {
     backendLog.log(`{red-fg}Error: ${err.message}{/red-fg}`);
@@ -104,6 +144,9 @@ async function main() {
 }
 
 screen.key(['q', 'C-c'], () => {
+    processes.forEach(p => {
+        try { p.kill(); } catch (e) {}
+    });
     process.exit(0);
 });
 
