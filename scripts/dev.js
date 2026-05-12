@@ -162,10 +162,9 @@ async function main() {
     );
 
     // expo must inherit the parent TTY so ink renders the QR code (isTTY=false suppresses it)
-    const npxExe = isWindows ? 'npx.cmd' : 'npx';
-    const expoProc = spawn(npxExe, ['expo', 'start'], {
+    const expoProc = spawn('npx', ['expo', 'start'], {
       cwd: ROOT,
-      shell: false,
+      shell: true,
       stdio: 'inherit',
       env: { ...process.env },
     });
