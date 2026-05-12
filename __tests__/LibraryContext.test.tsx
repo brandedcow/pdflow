@@ -340,4 +340,79 @@ describe('LibraryContext', () => {
       expect(submitExtraction).not.toHaveBeenCalled();
     });
   });
+
+  describe('checkExtraction', () => {
+    const pendingBook = {
+      id: 'job-123',
+      filename: 'test.pdf',
+      path: '/mock/documents/pdfs/job-123-test.pdf',
+      addedAt: '2026-05-11T00:00:00.000Z',
+      extractionStatus: 'pending' as const,
+    };
+
+    it('resolves to ready when poll returns success immediately', async () => {
+      await AsyncStorage.setItem('pdflow_books', JSON.stringify([pendingBook]));
+      (pollJobStatus as jest.Mock).mockResolvedValue({
+        job_id: 'job-123',
+        status: 'success',
+        overall_confidence: 0.9,
+        page_count: 2,
+        blocks: [],
+      });
+
+      const { result } = renderHook(() => useLibrary(), { wrapper });
+      await act(async () => {});
+
+      await act(async () => {
+        await result.current.checkExtraction('job-123');
+      });
+
+      expect(result.current.books[0].extractionStatus).toBe('ready');
+    });
+
+    it('restarts the poll timer when job is still processing', async () => {
+      jest.useFakeTimers();
+      await AsyncStorage.setItem('pdflow_books', JSON.stringify([pendingBook]));
+      (pollJobStatus as jest.Mock).mockResolvedValue({
+        job_id: 'job-123',
+        status: 'processing',
+      });
+
+      const { result } = renderHook(() => useLibrary(), { wrapper });
+      await act(async () => {});
+
+      await act(async () => {
+        await result.current.checkExtraction('job-123');
+      });
+
+      // pollJobStatus called once by checkExtraction
+      expect(pollJobStatus).toHaveBeenCalledTimes(1);
+
+      // Advance by one interval — the restarted timer should fire
+      await act(async () => {
+        await jest.advanceTimersByTimeAsync(60_000);
+      });
+
+      expect(pollJobStatus).toHaveBeenCalledTimes(2);
+      jest.useRealTimers();
+    });
+
+    it('is a no-op for non-pending books', async () => {
+      const readyBook = {
+        ...pendingBook,
+        id: 'ready-book-id',
+        extractionStatus: 'ready' as const,
+      };
+      await AsyncStorage.setItem('pdflow_books', JSON.stringify([readyBook]));
+
+      const { result } = renderHook(() => useLibrary(), { wrapper });
+      await act(async () => {});
+
+      await act(async () => {
+        await result.current.checkExtraction('ready-book-id');
+      });
+
+      expect(pollJobStatus).not.toHaveBeenCalled();
+    });
+  });
 });

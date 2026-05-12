@@ -21,8 +21,6 @@ jest.mock('../src/components/reader/ReaderSettings', () => {
 });
 
 const mockResult: ExtractionResult = {
-  book_id: 'test-id',
-  status: 'success',
   overall_confidence: 0.92,
   page_count: 2,
   blocks: [

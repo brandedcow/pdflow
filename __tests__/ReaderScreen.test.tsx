@@ -33,8 +33,6 @@ const makeBook = (overrides: Partial<Book> = {}): Book => ({
   addedAt: '2026-05-10T00:00:00.000Z',
   extractionStatus: 'ready',
   extractionResult: {
-    book_id: 'book-1',
-    status: 'success',
     overall_confidence: 0.92,
     page_count: 3,
     blocks: [],
