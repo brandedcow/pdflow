@@ -54,3 +54,6 @@ __pycache__/
 # Celery / runtime data
 backend/data/*.db
 backend/uploads/*.pdf
+
+# Test PDFs
+test-pdfs/
