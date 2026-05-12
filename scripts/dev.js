@@ -18,23 +18,26 @@ const grid = new contrib.grid({
 const expoLog = grid.set(0, 0, 11, 7, blessed.log, {
   label: ' Expo ',
   border: { type: 'line' },
-  scrollable: true
+  scrollable: true,
+  tags: true
 });
 
 const backendLog = grid.set(0, 7, 5, 5, blessed.log, {
   label: ' Backend ',
   border: { type: 'line' },
-  scrollable: true
+  scrollable: true,
+  tags: true
 });
 
 const workerLog = grid.set(5, 7, 6, 5, blessed.log, {
   label: ' Worker ',
   border: { type: 'line' },
-  scrollable: true
+  scrollable: true,
+  tags: true
 });
 
 const footer = grid.set(11, 0, 1, 12, blessed.text, {
-  content: ' q: Quit | r: Restart | s: Clear | Tab: Cycle Focus | Arrows: Scroll',
+  content: ' q: Quit | r: Restart | m: Maximize | s: Clear | Tab: Cycle Focus | Arrows: Scroll',
   style: { fg: 'black', bg: 'white' }
 });
 
@@ -153,6 +156,7 @@ async function startTunnel() {
         tunnel.stderr.on('data', (data) => {
             const output = data.toString();
             backendLog.log(output);
+            screen.render();
             const match = output.match(/https:\/\/[a-z0-9-]+\.trycloudflare\.com/);
             if (match && !resolved) {
                 resolved = true;
@@ -177,10 +181,12 @@ function startService(command, args, cwd, logPane, env = {}) {
     
     proc.stdout.on('data', (data) => {
         logPane.log(data.toString());
+        screen.render();
     });
     
     proc.stderr.on('data', (data) => {
         logPane.log(`{red-fg}${data.toString()}{/red-fg}`);
+        screen.render();
     });
 
     return proc;
@@ -188,6 +194,41 @@ function startService(command, args, cwd, logPane, env = {}) {
 
 let backendProc, workerProc, expoProc;
 let uvicornPath, celeryPath, backendCwd, rootCwd;
+
+let isMaximized = false;
+let originalPositions = new Map();
+
+screen.key(['m'], () => {
+    if (isMaximized) {
+        panes.forEach(p => {
+            const pos = originalPositions.get(p);
+            if (pos) {
+                p.position.left = pos.left;
+                p.position.top = pos.top;
+                p.position.width = pos.width;
+                p.position.height = pos.height;
+            }
+            p.hidden = false;
+        });
+        isMaximized = false;
+    } else {
+        panes.forEach(p => {
+            originalPositions.set(p, {
+                left: p.position.left,
+                top: p.position.top,
+                width: p.position.width,
+                height: p.position.height
+            });
+            if (p !== focusedPane) p.hidden = true;
+        });
+        focusedPane.position.left = 0;
+        focusedPane.position.top = 0;
+        focusedPane.position.width = '100%';
+        focusedPane.position.height = '92%';
+        isMaximized = true;
+    }
+    screen.render();
+});
 
 function restartBackend() {
     backendLog.log('{yellow-fg}Restarting Backend and Worker...{/yellow-fg}');
@@ -227,7 +268,7 @@ async function main() {
     updateEnv(url);
     backendLog.log('{green-fg}.env.local updated with tunnel URL{/green-fg}');
     
-    footer.setContent(` q: Quit | r: Restart | s: Clear | Tab: Cycle Focus | Arrows: Scroll | Tunnel: ${url}`);
+    footer.setContent(` q: Quit | r: Restart | m: Maximize | s: Clear | Tab: Cycle Focus | Arrows: Scroll | Tunnel: ${url}`);
     screen.render();
 
     const isWindows = process.platform === 'win32';
