@@ -10,7 +10,7 @@ type ActiveView = 'pdf' | 'reader';
 
 export default function ReaderScreen() {
   const { bookId, uri } = useLocalSearchParams<{ bookId: string; uri: string }>();
-  const { books, retryExtraction } = useLibrary();
+  const { books, retryExtraction, checkExtraction } = useLibrary();
   const insets = useSafeAreaInsets();
   const book = books.find((b) => b.id === bookId);
 
@@ -22,14 +22,6 @@ export default function ReaderScreen() {
   const canRetry = book?.extractionStatus === 'failed';
   const isPending = book?.extractionStatus === 'pending';
 
-  function handleToggle() {
-    setActiveView((v) => (v === 'reader' ? 'pdf' : 'reader'));
-  }
-
-  function handleRetry() {
-    if (bookId) void retryExtraction(bookId);
-  }
-
   return (
     <View style={styles.container}>
       <View style={[styles.header, { paddingTop: insets.top + 12 }]}>
@@ -37,9 +29,18 @@ export default function ReaderScreen() {
           <Text style={styles.backButton}>← Back</Text>
         </TouchableOpacity>
         <View style={styles.headerActions}>
+          {isPending && (
+            <TouchableOpacity
+              onPress={() => { if (bookId) void checkExtraction(bookId); }}
+              style={styles.headerIcon}
+              accessibilityLabel="Check extraction status"
+            >
+              <Ionicons name="sync-outline" size={22} color="#111" />
+            </TouchableOpacity>
+          )}
           {canRetry && (
             <TouchableOpacity
-              onPress={handleRetry}
+              onPress={() => { if (bookId) void retryExtraction(bookId); }}
               style={styles.headerIcon}
               accessibilityLabel="Retry extraction"
             >
@@ -48,7 +49,7 @@ export default function ReaderScreen() {
           )}
           {(canToggle || isPending) && (
             <TouchableOpacity
-              onPress={handleToggle}
+              onPress={() => setActiveView((v) => (v === 'reader' ? 'pdf' : 'reader'))}
               disabled={!canToggle}
               style={[styles.headerIcon, !canToggle && styles.headerIconDisabled]}
               accessibilityLabel="Toggle view"
